@@ -27,19 +27,12 @@ public final class SearchTemplateFields {
   public static final String ENTITY_NAME_FIELD = "name";
   public static final String DESCRIPTION_FIELD = "description";
   public static final String PLATFORM_FIELD = "platform";
-  public static final String COLUMN_NAME_FIELD = "columnName";
+  public static final String COLUMN_NAME_FIELD = "name_1";
   public static final String URN_FIELD = "urn";
-  public static final String CUSTOM_PROPERTIES_FIELD = "customProperties";
-  public static final float CUSTOM_PROPERTIES_WEIGHT = 0.8f;
 
   private static final Set<String> TEXT_FIELDS =
-      Set.of("name", "qualifiedName", "description", "columns");
+      Set.of("name", "qualifiedName", "description", "other");
   private static final Set<String> NAME_FIELDS = Set.of("name", "qualifiedName");
-
-  @Nonnull
-  public static SearchFieldConfig customPropertiesField() {
-    return shortField(CUSTOM_PROPERTIES_FIELD, CUSTOM_PROPERTIES_WEIGHT);
-  }
 
   private SearchTemplateFields() {}
 
@@ -53,39 +46,24 @@ public final class SearchTemplateFields {
     fields.add(shortField("name", 10f));
     fields.add(shortField("qualifiedName", 10f));
     fields.add(shortField("description", 1f));
-    fields.add(shortField("columns", 1f));
+    fields.add(shortField("other", 0.5f));
     fields.add(shortField("tags", 0.5f));
     return fields;
   }
 
-  /** Indexed name for an annotation: {@code searchLabel}, or {@code fieldName}. */
+  /** Degree-aware indexed name for the resolved V3 annotation, or its source field name. */
   @Nonnull
   public static String indexedName(@Nonnull SearchableAnnotation annotation) {
-    return annotation.indexedName();
+    SearchableAnnotation resolved = annotation.resolvedForV3();
+    return resolved.indexedFieldName().orElse(resolved.getFieldName());
   }
 
-  /**
-   * Text is queried at the field weight. Stemmed is half, except on the name fields. Other indexed
-   * names are queried as themselves.
-   */
+  /** Serializes the already-resolved Stage 1 field configurations and their weights. */
   @Nonnull
   public static List<String> analyzedFields(@Nonnull List<SearchFieldConfig> fields) {
     List<String> names = new ArrayList<>();
     for (SearchFieldConfig field : fields) {
-      String indexed = field.fieldName();
-      if (indexed.indexOf('.') > 0) {
-        names.add(indexed + "^" + trimBoost(field.boost()));
-        continue;
-      }
-      String base = textBase(indexed);
-      if (TEXT_FIELDS.contains(base)) {
-        names.add(indexed + ".text^" + trimBoost(field.boost()));
-        if (!NAME_FIELDS.contains(base)) {
-          names.add(indexed + ".stemmed^" + trimBoost(field.boost() / 2f));
-        }
-      } else {
-        names.add(indexed + "^" + trimBoost(field.boost()));
-      }
+      names.add(field.fieldName() + "^" + trimBoost(field.boost()));
     }
     return names;
   }
@@ -100,9 +78,7 @@ public final class SearchTemplateFields {
         identity.add(field);
       }
     }
-    List<String> names = analyzedFields(identity);
-    names.add(URN_FIELD + "^1");
-    return names;
+    return analyzedFields(identity);
   }
 
   @Nonnull
@@ -136,12 +112,7 @@ public final class SearchTemplateFields {
 
   /** Analyzed text is a shared text field. A keyword is not. */
   public static boolean analyzedText(@Nonnull String indexedName) {
-    String base = indexedName;
-    int dot = base.indexOf('.');
-    if (dot > 0) {
-      base = base.substring(0, dot);
-    }
-    return TEXT_FIELDS.contains(textBase(base));
+    return indexedName.endsWith(".text") || indexedName.endsWith(".stemmed");
   }
 
   @Nonnull
@@ -183,10 +154,11 @@ public final class SearchTemplateFields {
       @Nonnull Collection<SearchableAnnotation> annotations) {
     Map<String, Float> boosts = new LinkedHashMap<>();
     for (SearchableAnnotation annotation : annotations) {
-      if (!annotation.isQueryByDefault()) {
+      SearchableAnnotation resolved = annotation.resolvedForV3();
+      if (!resolved.isV3Searchable() || !resolved.isQueryByDefault()) {
         continue;
       }
-      boosts.putIfAbsent(indexedName(annotation), (float) annotation.getBoostScore());
+      boosts.putIfAbsent(indexedName(resolved), (float) resolved.getBoostScore());
     }
     List<SearchFieldConfig> fields = new ArrayList<>();
     boosts.forEach(
@@ -246,7 +218,7 @@ public final class SearchTemplateFields {
       for (String name : overrides.getRemove()) {
         String resolved = resolver.resolveRemove(name);
         if (!resolved.isBlank()) {
-          fields.remove(resolved);
+          fields.entrySet().removeIf(entry -> sameLogicalField(entry.getKey(), resolved));
         }
       }
     }
@@ -264,14 +236,27 @@ public final class SearchTemplateFields {
         if (config.fieldName().isBlank()) {
           continue;
         }
-        if (!fields.containsKey(config.fieldName())) {
+        List<String> matching =
+            fields.keySet().stream()
+                .filter(name -> sameLogicalField(name, config.fieldName()))
+                .toList();
+        if (matching.isEmpty()) {
           throw new SearchTemplateException(
               "Search template fields.override is not in the queried set: " + boost.getFieldName());
         }
-        fields.put(config.fieldName(), config);
+        matching.forEach(
+            name -> fields.put(name, fields.get(name).toBuilder().boost(config.boost()).build()));
       }
     }
     return new ArrayList<>(fields.values());
+  }
+
+  private static boolean sameLogicalField(@Nonnull String configured, @Nonnull String requested) {
+    if (configured.equals(requested)) {
+      return true;
+    }
+    return configured.startsWith(requested + ".")
+        && (configured.endsWith(".text") || configured.endsWith(".stemmed"));
   }
 
   /**

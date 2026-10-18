@@ -4,7 +4,13 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertTrue;
 
+import com.linkedin.data.template.StringArray;
+import com.linkedin.metadata.models.annotation.SearchableAnnotation;
+import com.linkedin.metadata.search.elasticsearch.query.request.SearchFieldConfig;
 import com.linkedin.metadata.search.elasticsearch.query.v3.SearchTemplateMustache;
+import com.linkedin.search.template.SearchFieldBoost;
+import com.linkedin.search.template.SearchFieldBoostArray;
+import com.linkedin.search.template.SearchFieldOverrides;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -72,28 +78,35 @@ public class SearchTemplateSynonymTest {
   }
 
   @Test
-  public void testSharedFieldWeights() {
-    List<String> analyzed =
-        SearchTemplateFields.analyzedFields(SearchTemplateFields.sharedDefaults());
-    assertTrue(analyzed.contains("name.text^10"));
-    assertTrue(analyzed.contains("qualifiedName.text^10"));
-    assertFalse(analyzed.stream().anyMatch(name -> name.startsWith("name.stemmed")));
-    assertFalse(analyzed.stream().anyMatch(name -> name.startsWith("qualifiedName.stemmed")));
-    assertTrue(analyzed.contains("description.text^1"));
-    assertTrue(analyzed.contains("description.stemmed^0.5"));
-    assertTrue(analyzed.contains("columns.text^1"));
-    assertTrue(analyzed.contains("columns.stemmed^0.5"));
-    assertTrue(analyzed.contains("tags^0.5"));
-    assertFalse(analyzed.stream().anyMatch(name -> name.contains("customProperties")));
-    assertFalse(analyzed.stream().anyMatch(name -> name.contains("_search.")));
-    assertEquals(SearchTemplateFields.keywordPath("name"), "name.keyword");
-    assertEquals(SearchTemplateFields.keywordPath("platform"), "platform");
-    assertEquals(SearchTemplateFields.keywordPath("tags_1"), "tags_1");
-    assertTrue(
-        SearchTemplateFields.highlightRoots(SearchTemplateFields.sharedDefaults())
-            .contains("columns"));
-    assertFalse(
-        SearchTemplateFields.highlightRoots(SearchTemplateFields.sharedDefaults())
-            .contains("fieldPaths"));
+  public void testLogicalRootOverridesRespectDegree() {
+    List<SearchFieldConfig> base =
+        List.of(
+            field("name.text", 10),
+            field("name.stemmed", 5),
+            field("name_1.text", 4),
+            field("name_1.stemmed", 2));
+    SearchFieldOverrides remove = new SearchFieldOverrides();
+    remove.setRemove(new StringArray("name"));
+    List<SearchFieldConfig> withoutRoot = SearchTemplateFields.applyTemplate(base, remove);
+    assertEquals(
+        withoutRoot.stream().map(SearchFieldConfig::fieldName).toList(),
+        List.of("name_1.text", "name_1.stemmed"));
+
+    SearchFieldBoost degreeOne = new SearchFieldBoost().setFieldName("name_1").setBoost(7.0);
+    SearchFieldOverrides override = new SearchFieldOverrides();
+    override.setOverride(new SearchFieldBoostArray(degreeOne));
+    List<SearchFieldConfig> overridden = SearchTemplateFields.applyTemplate(base, override);
+    assertEquals(
+        overridden.stream()
+            .filter(field -> field.fieldName().startsWith("name_1."))
+            .map(SearchFieldConfig::boost)
+            .toList(),
+        List.of(7.0f, 7.0f));
+    assertEquals(overridden.get(0).boost(), 10.0f);
+  }
+
+  private static SearchFieldConfig field(String name, float boost) {
+    return SearchFieldConfig.detectSubFieldType(
+        name, boost, SearchableAnnotation.FieldType.TEXT, true);
   }
 }

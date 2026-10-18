@@ -89,8 +89,11 @@ public final class SearchTemplateMustache {
     context.put("entityNameField", SearchTemplateFields.keywordPath("name"));
     context.put("descriptionField", SearchTemplateFields.textPath("description"));
     context.put("platformField", SearchTemplateFields.PLATFORM_FIELD);
-    context.put("columnNameField", SearchTemplateFields.keywordPath("columns"));
+    context.put("columnNameField", SearchTemplateFields.keywordPath("name_1"));
     context.put("urnField", "urn");
+    context.put("urnExactField", "urn");
+    context.put("urnFoldedField", "urn.lowercase");
+    context.put("urnParsedField", "urn_name.text");
     context.put("query", "orders");
     context.put("raw", "orders");
     context.put("escaped", "orders");
@@ -115,10 +118,11 @@ public final class SearchTemplateMustache {
     context.put("nameText", SearchTemplateFields.textPath("name"));
     context.put("qualifiedNameKeyword", SearchTemplateFields.keywordPath("qualifiedName"));
     context.put("qualifiedNameText", SearchTemplateFields.textPath("qualifiedName"));
-    context.put("qualifiedNameIdentity", "qualifiedName");
+    context.put("qualifiedNameIdentity", SearchTemplateFields.textPath("qualifiedName"));
     context.put("descriptionText", SearchTemplateFields.textPath("description"));
     context.put("idKeyword", SearchTemplateFields.keywordPath("id"));
     context.put("urnKeyword", "urn");
+    context.put("normalizedKeyword", "orders");
     context.put("letterDigitQuery", "orders 2017");
     context.put("fqnQuery", "db schema table");
     context.put("wholeIdentifier", "orders2017");

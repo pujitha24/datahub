@@ -1,5 +1,6 @@
 package com.linkedin.metadata.search.elasticsearch.query.template;
 
+import static com.linkedin.metadata.Constants.CORP_USER_KEY_ASPECT_NAME;
 import static com.linkedin.metadata.Constants.DATASET_ENTITY_NAME;
 import static com.linkedin.metadata.Constants.SEARCH_TEMPLATE_ENTITY_NAME;
 import static com.linkedin.metadata.Constants.SEARCH_TEMPLATE_EXACT_URN;
@@ -12,6 +13,7 @@ import static com.linkedin.metadata.Constants.SEARCH_TEMPLATE_SEARCH_URN;
 import static com.linkedin.metadata.Constants.SEARCH_TEMPLATE_STRUCTURED_EXACT_URN;
 import static com.linkedin.metadata.Constants.SEARCH_TEMPLATE_STRUCTURED_URN;
 import static com.linkedin.metadata.Constants.STRUCTURED_PROPERTY_DEFINITION_ASPECT_NAME;
+import static com.linkedin.metadata.Constants.STRUCTURED_PROPERTY_ENTITY_NAME;
 import static com.linkedin.metadata.Constants.SYSTEM_ACTOR;
 import static io.datahubproject.test.search.SearchTestUtils.TEST_SEARCH_SERVICE_CONFIG;
 import static org.mockito.ArgumentMatchers.any;
@@ -19,7 +21,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
-import static org.testng.Assert.assertNotEquals;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNotSame;
 import static org.testng.Assert.assertNull;
@@ -37,6 +38,7 @@ import com.linkedin.data.template.StringMap;
 import com.linkedin.datahub.DataHubSearchConfig;
 import com.linkedin.entity.Aspect;
 import com.linkedin.events.metadata.ChangeType;
+import com.linkedin.identity.CorpUserInfo;
 import com.linkedin.metadata.TestEntitySpecBuilder;
 import com.linkedin.metadata.aspect.CachingAspectRetriever;
 import com.linkedin.metadata.aspect.GraphRetriever;
@@ -82,11 +84,10 @@ import com.linkedin.metadata.search.elasticsearch.query.request.PreparedSearchRe
 import com.linkedin.metadata.search.elasticsearch.query.request.SearchFieldConfig;
 import com.linkedin.metadata.search.elasticsearch.query.request.SearchQueryBuilder;
 import com.linkedin.metadata.search.elasticsearch.query.request.SearchRequestHandler;
-import com.linkedin.metadata.search.elasticsearch.query.request.V3SearchQueryBuilder;
+import com.linkedin.metadata.search.elasticsearch.query.request.v3.V3SearchQueryBuilder;
 import com.linkedin.metadata.search.elasticsearch.query.v3.SearchTemplateJson;
 import com.linkedin.metadata.search.elasticsearch.query.v3.SearchTemplateMustache;
 import com.linkedin.metadata.search.elasticsearch.query.v3.SearchV3QueryBuilder;
-import com.linkedin.metadata.search.elasticsearch.query.v3.StructuredPropertyQueryFields;
 import com.linkedin.metadata.utils.elasticsearch.SearchClientShim;
 import com.linkedin.policy.DataHubActorFilter;
 import com.linkedin.policy.DataHubPolicyInfo;
@@ -112,7 +113,6 @@ import com.linkedin.search.template.SearchTemplateRoute;
 import com.linkedin.search.template.SearchTemplateRouteArray;
 import com.linkedin.search.template.StructuredPropertyQuery;
 import com.linkedin.structured.StructuredPropertyDefinition;
-import com.linkedin.util.Pair;
 import io.datahubproject.metadata.context.OperationContext;
 import io.datahubproject.metadata.context.ResolvedSearchTemplate;
 import io.datahubproject.metadata.context.RetrieverContext;
@@ -231,6 +231,17 @@ public class SearchTemplateTest {
               Map<Urn, Map<String, Aspect>> result = new HashMap<>();
               for (Urn urn : urns) {
                 Map<String, Aspect> byAspect = new HashMap<>();
+                if (aspects.contains(CORP_USER_KEY_ASPECT_NAME)
+                    && "corpuser".equals(urn.getEntityType())) {
+                  byAspect.put(
+                      CORP_USER_KEY_ASPECT_NAME,
+                      new Aspect(
+                          new CorpUserInfo()
+                              .setActive(true)
+                              .setEmail(urn.getId())
+                              .setDisplayName(urn.getId())
+                              .data()));
+                }
                 for (String aspect : aspects) {
                   if (!STRUCTURED_PROPERTY_DEFINITION_ASPECT_NAME.equals(aspect)) {
                     continue;
@@ -244,8 +255,15 @@ public class SearchTemplateTest {
               }
               return result;
             });
+    RetrieverContext retrieverContext =
+        RetrieverContext.builder()
+            .aspectRetriever(retriever)
+            .cachingAspectRetriever(retriever)
+            .graphRetriever(GraphRetriever.EMPTY)
+            .searchRetriever(structuredProperties())
+            .build();
     opContext =
-        TestOperationContexts.systemContextNoSearchAuthorization(retriever)
+        TestOperationContexts.systemContextNoSearchAuthorization(retrieverContext)
             .withSearchFlags(flags -> flags.setFulltext(true));
     templates = new SearchTemplateConfiguration();
     templates.setEnabled(true);
@@ -1310,13 +1328,18 @@ public class SearchTemplateTest {
     store(
         SEARCH_TEMPLATE_FULLTEXT_URN,
         body("Fulltext", "{ \"term\": { \"name\": \"from-template\" } }", null));
-    SearchTemplates.install(new SearchTemplateCoordinator(v3Config(), null, loader));
+    ElasticSearchConfiguration elastic = v3Config();
+    elastic.getEntityIndex().getV3().setKeywordReadEnabled(false);
+    EntityIndexVersionConfiguration v2 = new EntityIndexVersionConfiguration();
+    v2.setEnabled(true);
+    elastic.getEntityIndex().setV2(v2);
+    SearchTemplates.install(new SearchTemplateCoordinator(elastic, null, loader));
     SearchConfiguration search = new SearchConfiguration();
     search.setPartial(new PartialConfiguration());
     search.setExactMatch(new ExactMatchConfiguration());
     search.setWordGram(new WordGramConfiguration());
     String rendered =
-        new SearchQueryBuilder(search, null, false)
+        new SearchQueryBuilder(search, null)
             .buildQuery(opContext, List.of(TestEntitySpecBuilder.getSpec()), "orders", true)
             .toString();
     assertFalse(rendered.contains("from-template"), rendered);
@@ -1787,7 +1810,7 @@ public class SearchTemplateTest {
             .contains("@viewer="));
     List<String> expected =
         SearchTemplateFields.analyzedFields(
-            new V3SearchQueryBuilder(new SearchConfiguration(), null)
+            new V3SearchQueryBuilder(elastic.getSearch(), null)
                 .searchedFieldConfigs(opContext, List.of(TestEntitySpecBuilder.getSpec())));
     String fields =
         new SearchTemplateRenderer(loader, new SearchConfiguration(), null)
@@ -1796,7 +1819,7 @@ public class SearchTemplateTest {
     for (String field : expected) {
       assertTrue(fields.contains(field), field);
     }
-    assertTrue(fields.contains("textFieldOverride.text"), fields);
+    assertTrue(fields.contains("textFieldOverride^1.0"), fields);
   }
 
   @Test
@@ -2282,28 +2305,6 @@ public class SearchTemplateTest {
   }
 
   @Test
-  public void testStructuredPropertyQueryFieldUsesTheExistingPath() {
-    Urn property = UrnUtils.getUrn("urn:li:structuredProperty:certification.status");
-    StructuredPropertyDefinition defined = definition("certification.status", "string", null);
-    DataHubSearchConfig config = new DataHubSearchConfig();
-    config.setQueryByDefault(true);
-    config.setBoostScore(3.0);
-    defined.setSearchConfiguration(config);
-    SearchFieldConfig field = StructuredPropertyQueryFields.queryField(property, defined);
-    assertEquals(field.fieldName(), "structuredProperties.certification_status");
-    assertEquals(field.boost(), 3.0f);
-    assertFalse(field.fieldName().contains("customProperties"));
-    assertThrows(
-        SearchTemplateException.class,
-        () ->
-            StructuredPropertyReferences.resolveMember(
-                "structuredProperties._versioned.certification_status.00000000000001.string",
-                null,
-                null,
-                null));
-  }
-
-  @Test
   public void testHighlightFieldsAreApplied() {
     store(SEARCH_TEMPLATE_FULLTEXT_URN, body("Fulltext", "{ \"match_all\": {} }", null));
     SearchTemplateProperties template = body("Highlights", "{ \"match_all\": {} }", null);
@@ -2402,15 +2403,18 @@ public class SearchTemplateTest {
     Map<String, Object> context = SearchTemplateMustache.validationContext("");
     assertEquals(context.get("nameKeyword"), SearchTemplateFields.keywordPath("name"));
     assertEquals(context.get("nameText"), SearchTemplateFields.textPath("name"));
-    assertEquals(context.get("columnNameField"), SearchTemplateFields.keywordPath("columns"));
+    assertEquals(context.get("columnNameField"), SearchTemplateFields.keywordPath("name_1"));
     assertEquals(context.get("entityNameField"), SearchTemplateFields.keywordPath("name"));
     assertEquals(context.get("descriptionField"), SearchTemplateFields.textPath("description"));
+    assertEquals(context.get("urnExactField"), "urn");
+    assertEquals(context.get("urnFoldedField"), "urn.lowercase");
+    assertEquals(context.get("urnParsedField"), "urn_name.text");
     assertFalse(String.valueOf(context.get("qualifiedNameKeyword")).contains("_search."));
     assertFalse(String.valueOf(context.get("idKeyword")).contains("_search."));
   }
 
   @Test
-  public void testOverrideAcceptsAQueryByDefaultStructuredProperty() {
+  public void testWriteTimeOverrideDoesNotAssumeRuntimeCatalog() {
     Urn property = UrnUtils.getUrn("urn:li:structuredProperty:certification.status");
     StructuredPropertyDefinition defined = definition("certification.status", "string", null);
     DataHubSearchConfig config = new DataHubSearchConfig();
@@ -2430,13 +2434,6 @@ public class SearchTemplateTest {
         () ->
             SearchTemplateChecks.check(
                 template, 1024, opContext, retriever, List.of(TestEntitySpecBuilder.getSpec())));
-    StructuredPropertyQueryFields.replace(List.of(Pair.of(property, defined)));
-    try {
-      SearchTemplateChecks.check(
-          template, 1024, opContext, retriever, List.of(TestEntitySpecBuilder.getSpec()));
-    } finally {
-      StructuredPropertyQueryFields.replace(List.of());
-    }
   }
 
   @Test
@@ -2486,35 +2483,32 @@ public class SearchTemplateTest {
     DataHubSearchConfig urnConfig = new DataHubSearchConfig();
     urnConfig.setQueryByDefault(true);
     urnDefinition.setSearchConfiguration(urnConfig);
-    StructuredPropertyQueryFields.replace(
-        List.of(
-            Pair.of(stringProperty, stringDefinition),
-            Pair.of(numberProperty, numberDefinition),
-            Pair.of(urnProperty, urnDefinition)));
-    try {
-      store(SEARCH_TEMPLATE_FULLTEXT_URN, body("Fulltext", FULLTEXT_QUERY, null));
-      OperationContext bound =
-          opContext.withResolvedSearchTemplate(
-              new ResolvedSearchTemplate(SEARCH_TEMPLATE_FULLTEXT_URN, 1L, "fulltext", null));
-      SearchTemplateRenderer renderer =
-          new SearchTemplateRenderer(loader, new SearchConfiguration(), null);
-      String rendered =
-          renderer.render(bound, List.of(TestEntitySpecBuilder.getSpec()), "gold", true).toString();
-      assertTrue(rendered.contains("structuredProperties.certification_status.keyword"), rendered);
-      assertTrue(rendered.contains("gold"), rendered);
-      assertFalse(rendered.contains("structuredProperties.certification_status^"), rendered);
-      assertFalse(rendered.contains("structuredProperties.priority"), rendered);
-      assertTrue(rendered.contains("\"structuredProperties.owner\""), rendered);
-      assertFalse(rendered.contains("structuredProperties.owner.keyword"), rendered);
+    definitions.put(stringProperty, stringDefinition);
+    definitions.put(numberProperty, numberDefinition);
+    definitions.put(urnProperty, urnDefinition);
+    store(SEARCH_TEMPLATE_FULLTEXT_URN, body("Fulltext", FULLTEXT_QUERY, null));
+    OperationContext bound =
+        opContext.withResolvedSearchTemplate(
+            new ResolvedSearchTemplate(SEARCH_TEMPLATE_FULLTEXT_URN, 1L, "fulltext", null));
+    SearchTemplateRenderer renderer =
+        new SearchTemplateRenderer(loader, new SearchConfiguration(), null);
+    String rendered =
+        renderer
+            .render(bound, List.of(registry.getEntitySpec(DATASET_ENTITY_NAME)), "gold", true)
+            .toString();
+    assertTrue(rendered.contains("structuredProperties.certification_status.keyword"), rendered);
+    assertTrue(rendered.contains("gold"), rendered);
+    assertFalse(rendered.contains("structuredProperties.certification_status^"), rendered);
+    assertFalse(rendered.contains("structuredProperties.priority"), rendered);
+    assertTrue(rendered.contains("structuredProperties.owner__urn_name"), rendered);
+    assertFalse(rendered.contains("structuredProperties.owner.keyword"), rendered);
 
-      String phrase =
-          renderer
-              .render(bound, List.of(TestEntitySpecBuilder.getSpec()), "gold certified", true)
-              .toString();
-      assertTrue(phrase.contains("gold certified"), phrase);
-    } finally {
-      StructuredPropertyQueryFields.replace(List.of());
-    }
+    String phrase =
+        renderer
+            .render(
+                bound, List.of(registry.getEntitySpec(DATASET_ENTITY_NAME)), "gold certified", true)
+            .toString();
+    assertTrue(phrase.contains("gold certified"), phrase);
   }
 
   @Test
@@ -2538,13 +2532,13 @@ public class SearchTemplateTest {
     OperationContext searching =
         opContext
             .withSearchFlags(
-                flags -> flags.setFulltext(true).setSkipHighlighting(true).setSkipAggregates(true))
+                flags -> flags.setFulltext(true).setSkipHighlighting(false).setSkipAggregates(true))
             .withResolvedSearchTemplate(
                 new ResolvedSearchTemplate(SEARCH_TEMPLATE_FULLTEXT_URN, 1L, "fulltext", null));
     SearchRequestHandler handler =
         SearchRequestHandler.getBuilder(
             searching,
-            TestEntitySpecBuilder.getSpec(),
+            registry.getEntitySpec(DATASET_ENTITY_NAME),
             elastic,
             null,
             QueryFilterRewriteChain.EMPTY,
@@ -2663,74 +2657,62 @@ public class SearchTemplateTest {
   @Test
   public void testNameAndValueExamples() {
     installCertification(null);
-    try {
-      store(SEARCH_TEMPLATE_FULLTEXT_URN, nameValueTemplate(null));
-      String gold = renderStored("gold", false);
-      assertTrue(gold.contains("structuredProperties.certification_status.keyword"), gold);
-      assertTrue(gold.contains("gold"), gold);
-      assertFalse(gold.contains("dis_max"), gold);
+    store(SEARCH_TEMPLATE_FULLTEXT_URN, nameValueTemplate(null));
+    String gold = renderStored("gold", false);
+    assertTrue(gold.contains("structuredProperties.certification_status.keyword"), gold);
+    assertTrue(gold.contains("gold"), gold);
+    assertFalse(gold.contains("dis_max"), gold);
 
-      String named = renderStored("certification status gold", false);
-      assertTrue(named.contains("dis_max"), named);
-      assertTrue(named.contains("\"gold\""), named);
-      assertTrue(named.contains("structuredProperties.certification_status.keyword"), named);
-      assertTrue(named.contains("certification status gold"), named);
+    String named = renderStored("certification status gold", false);
+    assertTrue(named.contains("dis_max"), named);
+    assertTrue(named.contains("\"gold\""), named);
+    assertTrue(named.contains("structuredProperties.certification_status.keyword"), named);
+    assertTrue(named.contains("certification status gold"), named);
 
-      String silver = renderStored("certification status silver", false);
-      assertFalse(silver.contains("gold"), silver);
-      assertTrue(silver.contains("\"silver\""), silver);
+    String silver = renderStored("certification status silver", false);
+    assertFalse(silver.contains("gold"), silver);
+    assertTrue(silver.contains("\"silver\""), silver);
 
-      String nameOnly = renderStored("certification status", false);
-      assertFalse(nameOnly.contains("dis_max"), nameOnly);
+    String nameOnly = renderStored("certification status", false);
+    assertFalse(nameOnly.contains("dis_max"), nameOnly);
 
-      String trailing = renderStored("status gold", false);
-      assertFalse(trailing.contains("dis_max"), trailing);
+    String trailing = renderStored("status gold", false);
+    assertFalse(trailing.contains("dis_max"), trailing);
 
-      String qualified = renderStored("certification.status gold", false);
-      assertTrue(qualified.contains("dis_max"), qualified);
-      assertTrue(qualified.contains("\"gold\""), qualified);
-    } finally {
-      StructuredPropertyQueryFields.replace(List.of());
-    }
+    String qualified = renderStored("certification.status gold", false);
+    assertTrue(qualified.contains("dis_max"), qualified);
+    assertTrue(qualified.contains("\"gold\""), qualified);
   }
 
   @Test
   public void testRemovingAPropertyDropsBothClauses() {
     Urn property = installCertification(null);
-    try {
-      SearchTemplateProperties template = nameValueTemplate(null);
-      SearchFieldOverrides fields = new SearchFieldOverrides();
-      fields.setRemove(new StringArray(property.toString()));
-      template.setFields(fields);
-      store(SEARCH_TEMPLATE_FULLTEXT_URN, template);
-      String named = renderStored("certification status gold", false);
-      String value = renderStored("gold", false);
-      assertFalse(named.contains("structuredProperties.certification_status"), named);
-      assertFalse(named.contains("dis_max"), named);
-      assertFalse(value.contains("structuredProperties.certification_status"), value);
-    } finally {
-      StructuredPropertyQueryFields.replace(List.of());
-    }
+    SearchTemplateProperties template = nameValueTemplate(null);
+    SearchFieldOverrides fields = new SearchFieldOverrides();
+    fields.setRemove(new StringArray(property.toString()));
+    template.setFields(fields);
+    store(SEARCH_TEMPLATE_FULLTEXT_URN, template);
+    String named = renderStored("certification status gold", false);
+    String value = renderStored("gold", false);
+    assertFalse(named.contains("structuredProperties.certification_status"), named);
+    assertFalse(named.contains("dis_max"), named);
+    assertFalse(value.contains("structuredProperties.certification_status"), value);
   }
 
   @Test
   public void testOverrideDoesNotChangeNameAndValueWeight() {
     Urn property = installCertification(null);
-    try {
-      SearchTemplateProperties template = nameValueTemplate(null);
-      SearchFieldOverrides fields = new SearchFieldOverrides();
-      SearchFieldBoost override = new SearchFieldBoost();
-      override.setFieldName(property.toString());
-      override.setBoost(4.0);
-      fields.setOverride(new SearchFieldBoostArray(override));
-      template.setFields(fields);
-      store(SEARCH_TEMPLATE_FULLTEXT_URN, template);
-      String named = renderStored("certification status gold", false);
-      assertTrue(named.contains("\"boost\" : 8.0"), named);
-      assertTrue(named.contains("\"boost\" : 4.0"), named);
-    } finally {
-      StructuredPropertyQueryFields.replace(List.of());
-    }
+    SearchTemplateProperties template = nameValueTemplate(null);
+    SearchFieldOverrides fields = new SearchFieldOverrides();
+    SearchFieldBoost override = new SearchFieldBoost();
+    override.setFieldName(property.toString());
+    override.setBoost(4.0);
+    fields.setOverride(new SearchFieldBoostArray(override));
+    template.setFields(fields);
+    store(SEARCH_TEMPLATE_FULLTEXT_URN, template);
+    String named = renderStored("certification status gold", false);
+    assertTrue(named.contains("\"boost\" : 8.0"), named);
+    assertTrue(named.contains("\"boost\" : 4.0"), named);
   }
 
   @Test
@@ -2749,117 +2731,47 @@ public class SearchTemplateTest {
     definitions.put(priority, priorityDefinition);
     definitions.put(due, dueDefinition);
     definitions.put(owner, ownerDefinition);
-    StructuredPropertyQueryFields.replace(
-        List.of(
-            Pair.of(notes, notesDefinition),
-            Pair.of(priority, priorityDefinition),
-            Pair.of(due, dueDefinition),
-            Pair.of(owner, ownerDefinition)));
-    try {
-      store(SEARCH_TEMPLATE_FULLTEXT_URN, nameValueTemplate(null));
-      String rich = renderStored("notes gold", false);
-      assertTrue(rich.contains("dis_max"), rich);
-      assertTrue(rich.contains("structuredProperties.notes.keyword"), rich);
-      assertTrue(rich.contains("\"gold\""), rich);
+    store(SEARCH_TEMPLATE_FULLTEXT_URN, nameValueTemplate(null));
+    String rich = renderStored("notes gold", false);
+    assertTrue(rich.contains("dis_max"), rich);
+    assertTrue(rich.contains("structuredProperties.notes.keyword"), rich);
+    assertTrue(rich.contains("\"gold\""), rich);
 
-      String numbered = renderStored("priority gold", false);
-      assertFalse(numbered.contains("dis_max"), numbered);
-      assertFalse(numbered.contains("structuredProperties.priority"), numbered);
+    String numbered = renderStored("priority gold", false);
+    assertFalse(numbered.contains("dis_max"), numbered);
+    assertFalse(numbered.contains("structuredProperties.priority"), numbered);
 
-      String dated = renderStored("due date gold", false);
-      assertFalse(dated.contains("dis_max"), dated);
-      assertFalse(dated.contains("structuredProperties.due"), dated);
+    String dated = renderStored("due date gold", false);
+    assertFalse(dated.contains("dis_max"), dated);
+    assertFalse(dated.contains("structuredProperties.due"), dated);
 
-      String urned = renderStored("owner gold", false);
-      assertFalse(urned.contains("dis_max"), urned);
-      assertFalse(urned.contains("\"gold\""), urned);
-    } finally {
-      StructuredPropertyQueryFields.replace(List.of());
-    }
+    String urned = renderStored("owner gold", false);
+    assertFalse(urned.contains("dis_max"), urned);
+    assertFalse(urned.contains("\"gold\""), urned);
   }
 
   @Test
   public void testNameAndValueDisMaxSitsInsideFunctionScore() {
     installCertification(null);
-    try {
-      store(
-          SEARCH_TEMPLATE_FULLTEXT_URN,
-          nameValueTemplate(
-              "{ \"functions\": [], \"score_mode\": \"multiply\", \"boost_mode\": \"multiply\" }"));
-      String rendered = renderStored("certification status gold", false);
-      int functionScore = rendered.indexOf("\"function_score\"");
-      int disMax = rendered.indexOf("\"dis_max\"");
-      assertTrue(functionScore >= 0, rendered);
-      assertTrue(disMax > functionScore, rendered);
-      assertTrue(rendered.contains("\"tie_breaker\" : 0.0"), rendered);
-    } finally {
-      StructuredPropertyQueryFields.replace(List.of());
-    }
+    store(
+        SEARCH_TEMPLATE_FULLTEXT_URN,
+        nameValueTemplate(
+            "{ \"functions\": [], \"score_mode\": \"multiply\", \"boost_mode\": \"multiply\" }"));
+    String rendered = renderStored("certification status gold", false);
+    int functionScore = rendered.indexOf("\"function_score\"");
+    int disMax = rendered.indexOf("\"dis_max\"");
+    assertTrue(functionScore >= 0, rendered);
+    assertTrue(disMax > functionScore, rendered);
+    assertTrue(rendered.contains("\"tie_breaker\" : 0.0"), rendered);
   }
 
   @Test
   public void testNameAndValueStaysOnScroll() {
     installCertification(null);
-    try {
-      store(SEARCH_TEMPLATE_FULLTEXT_URN, nameValueTemplate(null));
-      String rendered = renderStored("certification status gold", true);
-      assertTrue(rendered.contains("dis_max"), rendered);
-      assertTrue(rendered.contains("\"gold\""), rendered);
-    } finally {
-      StructuredPropertyQueryFields.replace(List.of());
-    }
-  }
-
-  @Test
-  public void testCatalogStampChangesWhenDisplayNameChanges() {
-    Urn property = UrnUtils.getUrn("urn:li:structuredProperty:certification.status");
-    StructuredPropertyDefinition defined =
-        searchableProperty("certification.status", "string", "Certification Status");
-    definitions.put(property, defined);
-    StructuredPropertyQueryFields.replace(List.of(Pair.of(property, defined)));
-    try {
-      store(SEARCH_TEMPLATE_FULLTEXT_URN, nameValueTemplate(null));
-      SearchTemplateCoordinator coordinator =
-          new SearchTemplateCoordinator(v3Config(), null, loader);
-      String first =
-          coordinator
-              .bind(opContext, "customer orders")
-              .getSearchContext()
-              .getResolvedSearchTemplate()
-              .cacheKeyComponent();
-      assertTrue(first.contains("|sp="), first);
-
-      defined.setDisplayName("Certification Level");
-      StructuredPropertyQueryFields.replace(List.of(Pair.of(property, defined)));
-      String renamed =
-          coordinator
-              .bind(opContext, "customer orders")
-              .getSearchContext()
-              .getResolvedSearchTemplate()
-              .cacheKeyComponent();
-      assertNotEquals(first, renamed);
-
-      store(SEARCH_TEMPLATE_FULLTEXT_URN, body("Fulltext", "{ \"match_all\": {} }", null));
-      loader.invalidate(SEARCH_TEMPLATE_FULLTEXT_URN);
-      String without =
-          coordinator
-              .bind(opContext, "customer orders")
-              .getSearchContext()
-              .getResolvedSearchTemplate()
-              .cacheKeyComponent();
-      defined.setDisplayName("Certification Status");
-      StructuredPropertyQueryFields.replace(List.of(Pair.of(property, defined)));
-      String still =
-          coordinator
-              .bind(opContext, "customer orders")
-              .getSearchContext()
-              .getResolvedSearchTemplate()
-              .cacheKeyComponent();
-      assertEquals(without, still);
-      assertFalse(without.contains("|sp="), without);
-    } finally {
-      StructuredPropertyQueryFields.replace(List.of());
-    }
+    store(SEARCH_TEMPLATE_FULLTEXT_URN, nameValueTemplate(null));
+    String rendered = renderStored("certification status gold", true);
+    assertTrue(rendered.contains("dis_max"), rendered);
+    assertTrue(rendered.contains("\"gold\""), rendered);
   }
 
   private Urn installCertification(String version) {
@@ -2870,7 +2782,6 @@ public class SearchTemplateTest {
       defined.setVersion(version);
     }
     definitions.put(property, defined);
-    StructuredPropertyQueryFields.replace(List.of(Pair.of(property, defined)));
     return property;
   }
 
@@ -2902,7 +2813,8 @@ public class SearchTemplateTest {
         opContext.withResolvedSearchTemplate(
             new ResolvedSearchTemplate(SEARCH_TEMPLATE_FULLTEXT_URN, 1L, "fulltext", null));
     return new SearchV3QueryBuilder(loader, new SearchConfiguration(), null)
-        .render(bound, List.of(TestEntitySpecBuilder.getSpec()), query, true, null, scroll)
+        .render(
+            bound, List.of(registry.getEntitySpec(DATASET_ENTITY_NAME)), query, true, null, scroll)
         .query()
         .toString();
   }
@@ -2936,8 +2848,7 @@ public class SearchTemplateTest {
     StructuredPropertyDefinition definition = new StructuredPropertyDefinition();
     definition.setQualifiedName(qualifiedName);
     definition.setValueType(UrnUtils.getUrn("urn:li:dataType:datahub." + valueType));
-    definition.setEntityTypes(
-        new UrnArray(UrnUtils.getUrn("urn:li:entityType:datahub.testEntity")));
+    definition.setEntityTypes(new UrnArray(UrnUtils.getUrn("urn:li:entityType:datahub.dataset")));
     if (version != null) {
       definition.setVersion(version);
     }
@@ -3228,6 +3139,22 @@ public class SearchTemplateTest {
       result.setNumEntities(found.size());
       result.setPageSize(found.size());
       return result;
+    };
+  }
+
+  private SearchRetriever structuredProperties() {
+    return (entities, filters, scrollId, count, sortCriteria, searchFlags) -> {
+      SearchEntityArray found = new SearchEntityArray();
+      if (entities.contains(STRUCTURED_PROPERTY_ENTITY_NAME)) {
+        definitions.keySet().stream()
+            .sorted(java.util.Comparator.comparing(Urn::toString))
+            .limit(count)
+            .forEach(urn -> found.add(new SearchEntity().setEntity(urn)));
+      }
+      return new ScrollResult()
+          .setEntities(found)
+          .setNumEntities(found.size())
+          .setPageSize(found.size());
     };
   }
 

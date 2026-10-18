@@ -15,7 +15,6 @@ import com.linkedin.metadata.config.search.SearchConfiguration;
 import com.linkedin.metadata.models.EntitySpec;
 import com.linkedin.metadata.search.elasticsearch.query.request.SearchFieldConfig;
 import com.linkedin.metadata.search.elasticsearch.query.v3.SearchV3QueryBuilder;
-import com.linkedin.metadata.search.elasticsearch.query.v3.StructuredPropertyQueryFields;
 import com.linkedin.search.template.SearchTemplateDefaultRoute;
 import com.linkedin.search.template.SearchTemplateDialect;
 import com.linkedin.search.template.SearchTemplateProperties;
@@ -60,7 +59,6 @@ public class SearchTemplateGoldenTest {
 
   @AfterMethod
   public void clearCatalog() {
-    StructuredPropertyQueryFields.replace(List.of());
     SearchTemplates.install(null);
   }
 
@@ -209,7 +207,9 @@ public class SearchTemplateGoldenTest {
     assertTrue(
         fields.stream().anyMatch(field -> field.startsWith("name.text^")), fields.toString());
     assertTrue(
-        fields.stream().noneMatch(field -> field.startsWith("structuredProperties.")),
+        fields.stream()
+            .anyMatch(
+                field -> field.startsWith("structuredProperties.") && field.contains(".text^")),
         fields.toString());
     assertTrue(fields.stream().noneMatch(field -> field.contains("_search.")), fields.toString());
   }
@@ -243,8 +243,12 @@ public class SearchTemplateGoldenTest {
     ObjectNode root = MAPPER.createObjectNode();
     ArrayNode catalog = root.putArray("catalog");
     Set<String> datasetFields = new LinkedHashSet<>();
-    for (SearchFieldConfig field : StructuredPropertyQueryFields.fieldsFor(List.of("dataset"))) {
-      datasetFields.add(field.fieldName());
+    for (SearchTemplateFixtures.Property property : harness.properties) {
+      if (property.queryByDefault()
+          && property.entityTypes().contains("dataset")
+          && Set.of("string", "rich_text", "urn").contains(property.valueType())) {
+        datasetFields.add(property.fieldPath());
+      }
     }
     for (SearchTemplateFixtures.Property property : harness.properties) {
       ObjectNode row = catalog.addObject();
@@ -255,7 +259,6 @@ public class SearchTemplateGoldenTest {
       property.entityTypes().forEach(types::add);
       row.put("queryByDefault", property.queryByDefault());
       row.put("boostScore", property.boostScore());
-      row.put("fullTextSearch", property.fullTextSearch());
       if (property.displayName() != null) {
         row.put("displayName", property.displayName());
       }

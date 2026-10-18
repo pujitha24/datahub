@@ -9,7 +9,6 @@ import com.linkedin.metadata.models.EntitySpec;
 import com.linkedin.metadata.search.elasticsearch.index.entity.v3.EntitySearchIndexResolver;
 import com.linkedin.metadata.search.elasticsearch.query.v3.SearchTemplateJson;
 import com.linkedin.metadata.search.elasticsearch.query.v3.SearchV3QueryBuilder;
-import com.linkedin.metadata.search.elasticsearch.query.v3.StructuredPropertyQueryFields;
 import com.linkedin.metadata.utils.elasticsearch.SearchClientShim;
 import com.linkedin.search.template.SearchTemplateLadder;
 import io.datahubproject.metadata.context.OperationContext;
@@ -165,7 +164,7 @@ public class SearchTemplateCoordinator {
       identity += SearchTemplateViewer.identity(opContext, bodies.toString());
     }
     if (!classpathBridge[0] && nameAndValue[0]) {
-      identity += "|sp=" + StructuredPropertyQueryFields.catalogStamp();
+      identity += "|sp=" + queryBuilder.structuredPropertyCatalogStamp(opContext);
     }
     resolved.setCacheIdentity(identity);
   }

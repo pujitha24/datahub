@@ -7,8 +7,8 @@ namespace com.linkedin.search.template
  */
 record SearchTemplateBoost {
   /**
-   * Field the terms filter matches. A structured property is its definition URN.
-   * A member contribution is that field plus {@code .member}, such as {@code tags.member}.
+   * Field the terms filter matches. A structured property is its definition URN. A nested
+   * contribution uses its degree-suffixed indexed name, such as {@code tags_1}.
    */
   field: string
 

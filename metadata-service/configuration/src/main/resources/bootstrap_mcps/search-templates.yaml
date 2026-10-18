@@ -380,9 +380,8 @@
             },
             {
               "term": {
-                "{{urnField}}": {
-                  "value": "{{unquoted}}",
-                  "case_insensitive": true,
+                "{{urnFoldedField}}": {
+                  "value": "{{normalizedKeyword}}",
                   "boost": {{exactFactor}},
                   "_name": "urn"
                 }
@@ -390,9 +389,8 @@
             },
             {
               "term": {
-                "{{urnField}}": {
+                "{{urnExactField}}": {
                   "value": "{{unquoted}}",
-                  "case_insensitive": false,
                   "boost": {{caseSensitivityFactor}},
                   "_name": "urn"
                 }
@@ -472,9 +470,8 @@
             },
             {
               "term": {
-                "{{urnField}}": {
-                  "value": "{{unquoted}}",
-                  "case_insensitive": true,
+                "{{urnFoldedField}}": {
+                  "value": "{{normalizedKeyword}}",
                   "boost": {{exactFactor}},
                   "_name": "urn"
                 }
@@ -482,9 +479,8 @@
             },
             {
               "term": {
-                "{{urnField}}": {
+                "{{urnExactField}}": {
                   "value": "{{unquoted}}",
-                  "case_insensitive": false,
                   "boost": {{caseSensitivityFactor}},
                   "_name": "urn"
                 }
@@ -589,10 +585,18 @@
               }
             },
             {
-              "match_phrase": {
-                "{{urnKeyword}}": {
-                  "query": "{{unquoted}}",
+              "term": {
+                "{{urnFoldedField}}": {
+                  "value": "{{normalizedKeyword}}",
                   "boost": 50.0
+                }
+              }
+            },
+            {
+              "match_phrase": {
+                "{{urnParsedField}}": {
+                  "query": "{{unquoted}}",
+                  "boost": 40.0
                 }
               }
             },

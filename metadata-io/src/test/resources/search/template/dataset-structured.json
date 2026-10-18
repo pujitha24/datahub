@@ -48,7 +48,7 @@
                 "default_operator" : "and",
                 "enable_position_increments" : true,
                 "escape" : false,
-                "fields" : [ "applications^0.4", "columns.stemmed^0.2", "columns.text^0.4", "container^0.4", "customProperties.stemmed^0.2", "customProperties.text^0.4", "dataProduct^0.4", "description.stemmed^0.020000001", "description.text^0.040000003", "domains^0.4", "glossaryTerms^0.2", "name.text^4.0", "platform^0.4", "platformInstance^0.4", "qualifiedName.text^4.0", "tags^0.2", "urn.text^0.4" ],
+                "fields" : [ "applications.stemmed^0.2", "applications.text^0.4", "container.stemmed^0.2", "container.text^0.4", "customProperties^1.0", "dataProduct.stemmed^0.2", "dataProduct.text^0.4", "description.stemmed^0.2", "description.text^0.4", "domains.stemmed^0.2", "domains.text^0.4", "editedName^10.0", "glossaryTerms.stemmed^0.1", "glossaryTerms.text^0.2", "id^10.0", "name^10.0", "name.stemmed^2.0", "name.text^4.0", "other.stemmed^0.1", "other.text^0.2", "platform.stemmed^0.2", "platform.text^0.4", "platformInstance.stemmed^0.2", "platformInstance.text^0.4", "qualifiedName^10.0", "qualifiedName.stemmed^2.0", "qualifiedName.text^4.0", "tags.stemmed^0.1", "tags.text^0.2", "urn^10.0" ],
                 "fuzziness" : "AUTO",
                 "fuzzy_max_expansions" : 50,
                 "fuzzy_prefix_length" : 0,
@@ -61,7 +61,7 @@
             }, {
               "match_phrase_prefix" : {
                 "name.keyword" : {
-                  "boost" : 0.0,
+                  "boost" : 1.1,
                   "max_expansions" : 50,
                   "query" : "customer orders",
                   "slop" : 0,
@@ -71,17 +71,16 @@
             }, {
               "term" : {
                 "name.keyword" : {
-                  "boost" : 0.0,
+                  "boost" : 16.0,
                   "case_insensitive" : true,
                   "value" : "customer orders"
                 }
               }
             }, {
               "term" : {
-                "urn" : {
+                "urn.lowercase" : {
                   "_name" : "urn",
-                  "boost" : 0.0,
-                  "case_insensitive" : true,
+                  "boost" : 16.0,
                   "value" : "customer orders"
                 }
               }
@@ -96,30 +95,60 @@
             } ]
           }
         }, {
+          "simple_query_string" : {
+            "analyze_wildcard" : false,
+            "analyzer" : "v3_stemmed_search",
+            "auto_generate_synonyms_phrase_query" : true,
+            "boost" : 1.0,
+            "default_operator" : "or",
+            "fields" : [ "structuredProperties._versioned.contract_id.00000000000001.string.stemmed^1.0", "structuredProperties.certification_status.stemmed^0.6", "structuredProperties.owner_ref__urn_name.stemmed^0.3", "structuredProperties.summary_notes.stemmed^0.4" ],
+            "flags" : -1,
+            "fuzzy_max_expansions" : 50,
+            "fuzzy_prefix_length" : 0,
+            "fuzzy_transpositions" : true,
+            "lenient" : true,
+            "query" : "customer orders"
+          }
+        }, {
+          "simple_query_string" : {
+            "analyze_wildcard" : false,
+            "analyzer" : "v3_text_search",
+            "auto_generate_synonyms_phrase_query" : true,
+            "boost" : 1.0,
+            "default_operator" : "or",
+            "fields" : [ "structuredProperties.certification_status.text^1.2", "structuredProperties.summary_notes.text^0.8", "structuredProperties.owner_ref__urn_name.text^0.6", "structuredProperties._versioned.contract_id.00000000000001.string.text^2.0" ],
+            "flags" : -1,
+            "fuzzy_max_expansions" : 50,
+            "fuzzy_prefix_length" : 0,
+            "fuzzy_transpositions" : true,
+            "lenient" : true,
+            "query" : "customer orders"
+          }
+        }, {
           "term" : {
-            "structuredProperties.certification_status.keyword" : {
-              "boost" : 3.0,
+            "structuredProperties._versioned.contract_id.00000000000001.string.keyword" : {
+              "boost" : 2.0,
               "value" : "customer orders"
             }
           }
         }, {
           "term" : {
-            "structuredProperties._versioned.contract_id.00000000000001.string.keyword" : {
-              "boost" : 5.0,
+            "structuredProperties.certification_status.keyword" : {
+              "boost" : 1.2,
               "value" : "customer orders"
             }
           }
         }, {
           "term" : {
             "structuredProperties.owner_ref" : {
-              "boost" : 1.5,
+              "boost" : 0.6,
               "value" : "customer orders"
             }
           }
         }, {
           "term" : {
             "structuredProperties.summary_notes.keyword" : {
-              "boost" : 2.0,
+              "boost" : 0.8,
               "value" : "customer orders"
             }
           }

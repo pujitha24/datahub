@@ -45,7 +45,7 @@
                 "auto_generate_synonyms_phrase_query" : true,
                 "boost" : 1.0,
                 "default_operator" : "or",
-                "fields" : [ "container^0.4", "dataProduct^0.4", "description.stemmed^0.020000001", "qualifiedName.text^4.0", "name.text^4.0", "customProperties.text^0.4", "domains^0.4", "urn.text^0.4", "platformInstance^0.4", "columns.stemmed^0.2", "platform^0.4", "tags^0.2", "customProperties.stemmed^0.2", "columns.text^0.4", "description.text^0.040000003", "glossaryTerms^0.2", "applications^0.4" ],
+                "fields" : [ "platformInstance.text^0.4", "applications.stemmed^0.2", "dataProduct.text^0.4", "platform.stemmed^0.2", "other.stemmed^0.1", "description.stemmed^0.2", "tags.stemmed^0.1", "domains.text^0.4", "domains.stemmed^0.2", "qualifiedName.stemmed^2.0", "tags.text^0.2", "description.text^0.4", "platform.text^0.4", "name.stemmed^2.0", "id^10.0", "applications.text^0.4", "glossaryTerms.stemmed^0.1", "qualifiedName^10.0", "name.text^4.0", "qualifiedName.text^4.0", "urn^10.0", "customProperties^1.0", "platformInstance.stemmed^0.2", "editedName^10.0", "container.text^0.4", "name^10.0", "glossaryTerms.text^0.2", "dataProduct.stemmed^0.2", "other.text^0.2", "container.stemmed^0.2" ],
                 "flags" : -1,
                 "fuzzy_max_expansions" : 50,
                 "fuzzy_prefix_length" : 0,
@@ -55,7 +55,7 @@
             }, {
               "match_phrase_prefix" : {
                 "name.text" : {
-                  "boost" : 0.0,
+                  "boost" : 1.1,
                   "max_expansions" : 50,
                   "query" : "customer orders",
                   "slop" : 0,
@@ -81,7 +81,7 @@
                 "auto_generate_synonyms_phrase_query" : true,
                 "boost" : 3.0,
                 "default_operator" : "and",
-                "fields" : [ "urn^1.0", "qualifiedName.text^4.0", "name.text^4.0" ],
+                "fields" : [ "name^10.0", "name.text^4.0", "qualifiedName.text^4.0", "name.stemmed^2.0", "qualifiedName^10.0", "qualifiedName.stemmed^2.0" ],
                 "flags" : -1,
                 "fuzzy_max_expansions" : 50,
                 "fuzzy_prefix_length" : 0,
@@ -90,6 +90,36 @@
               }
             } ],
             "tie_breaker" : 0.01
+          }
+        }, {
+          "simple_query_string" : {
+            "analyze_wildcard" : false,
+            "analyzer" : "v3_stemmed_search",
+            "auto_generate_synonyms_phrase_query" : true,
+            "boost" : 1.0,
+            "default_operator" : "or",
+            "fields" : [ "structuredProperties._versioned.contract_id.00000000000001.string.stemmed^9.0", "structuredProperties.owner_ref__urn_name.stemmed^0.3", "structuredProperties.summary_notes.stemmed^0.4" ],
+            "flags" : -1,
+            "fuzzy_max_expansions" : 50,
+            "fuzzy_prefix_length" : 0,
+            "fuzzy_transpositions" : true,
+            "lenient" : true,
+            "query" : "customer orders"
+          }
+        }, {
+          "simple_query_string" : {
+            "analyze_wildcard" : false,
+            "analyzer" : "v3_text_search",
+            "auto_generate_synonyms_phrase_query" : true,
+            "boost" : 1.0,
+            "default_operator" : "or",
+            "fields" : [ "structuredProperties.summary_notes.text^0.8", "structuredProperties.owner_ref__urn_name.text^0.6", "structuredProperties._versioned.contract_id.00000000000001.string.text^9.0" ],
+            "flags" : -1,
+            "fuzzy_max_expansions" : 50,
+            "fuzzy_prefix_length" : 0,
+            "fuzzy_transpositions" : true,
+            "lenient" : true,
+            "query" : "customer orders"
           }
         }, {
           "term" : {
@@ -101,14 +131,14 @@
         }, {
           "term" : {
             "structuredProperties.owner_ref" : {
-              "boost" : 1.5,
+              "boost" : 0.6,
               "value" : "customer orders"
             }
           }
         }, {
           "term" : {
             "structuredProperties.summary_notes.keyword" : {
-              "boost" : 2.0,
+              "boost" : 0.8,
               "value" : "customer orders"
             }
           }

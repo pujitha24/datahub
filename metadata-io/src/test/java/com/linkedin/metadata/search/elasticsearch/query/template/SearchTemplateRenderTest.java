@@ -16,14 +16,15 @@ import com.linkedin.data.template.StringMap;
 import com.linkedin.metadata.TestEntitySpecBuilder;
 import com.linkedin.metadata.config.search.ElasticSearchConfiguration;
 import com.linkedin.metadata.config.search.SearchConfiguration;
+import com.linkedin.metadata.config.search.StructuredPropertyQueryConfiguration;
 import com.linkedin.metadata.models.EntitySpec;
 import com.linkedin.metadata.search.MatchedField;
 import com.linkedin.metadata.search.elasticsearch.query.filter.QueryFilterRewriteChain;
 import com.linkedin.metadata.search.elasticsearch.query.request.SearchRequestHandler;
+import com.linkedin.metadata.search.elasticsearch.query.request.v3.StructuredPropertySearchCatalog;
 import com.linkedin.metadata.search.elasticsearch.query.v3.RenderedSearchTemplate;
 import com.linkedin.metadata.search.elasticsearch.query.v3.SearchTemplateMatchReport;
 import com.linkedin.metadata.search.elasticsearch.query.v3.SearchV3QueryBuilder;
-import com.linkedin.metadata.search.elasticsearch.query.v3.StructuredPropertyQueryFields;
 import com.linkedin.search.template.HighlightFieldOverrides;
 import com.linkedin.search.template.SearchFieldBoost;
 import com.linkedin.search.template.SearchFieldBoostArray;
@@ -85,7 +86,6 @@ public class SearchTemplateRenderTest {
 
   @AfterMethod
   public void clear() {
-    StructuredPropertyQueryFields.replace(List.of());
     SearchTemplates.install(null);
   }
 
@@ -497,7 +497,7 @@ public class SearchTemplateRenderTest {
     harness.store("urn:li:searchTemplate:overrideWeight", weighted);
     String mixed =
         render("urn:li:searchTemplate:overrideWeight", "certification status gold", true);
-    assertFalse(mixed.contains(harness.property("certification.status").fieldPath() + ".text^9"));
+    assertTrue(mixed.contains(harness.property("certification.status").fieldPath() + ".text^9"));
     assertTrue(mixed.contains("\"boost\" : 9.0"));
     assertTrue(mixed.contains("\"boost\" : 8.0"));
     assertTrue(mixed.contains("\"_name\" : \"nameAndValue\""));
@@ -512,9 +512,9 @@ public class SearchTemplateRenderTest {
     number.setFields(numberFields);
     SearchTemplateChecks.check(number, 1024, harness.opContext, harness.retriever, null);
     harness.store("urn:li:searchTemplate:numberExact", number);
-    assertFalse(
-        render("urn:li:searchTemplate:numberExact", "gold", true)
-            .contains(harness.property("priority.rank").fieldPath()));
+    assertThrows(
+        SearchTemplateException.class,
+        () -> render("urn:li:searchTemplate:numberExact", "gold", true));
   }
 
   @Test
@@ -530,7 +530,7 @@ public class SearchTemplateRenderTest {
         QueryBuilders.termQuery(path + ".keyword", "gold")
             .queryName(SearchTemplateMatchReport.NAME_AND_VALUE));
     Map<String, RenderedSearchTemplate.NamedClause> namedClauses =
-        SearchTemplateMatchReport.namedClauses(unique);
+        SearchTemplateMatchReport.namedClauses(unique, indexedProperties());
 
     Map<String, Set<String>> matched = new LinkedHashMap<>();
     matched.put(path, Set.of("Gold"));
@@ -568,7 +568,7 @@ public class SearchTemplateRenderTest {
     reused.should(
         QueryBuilders.termQuery(summary + ".keyword", "Gold")
             .queryName(SearchTemplateMatchReport.EXACT));
-    namedClauses = SearchTemplateMatchReport.namedClauses(reused);
+    namedClauses = SearchTemplateMatchReport.namedClauses(reused, indexedProperties());
     Map<String, Set<String>> again = new LinkedHashMap<>();
     again.put(SearchTemplateMatchReport.EXACT, Set.of("Gold"));
     again.put(path, Set.of("Gold"));
@@ -663,6 +663,18 @@ public class SearchTemplateRenderTest {
             QueryFilterRewriteChain.EMPTY,
             TEST_SEARCH_SERVICE_CONFIG)
         .getSearchRequest(context, "orders", null, null, 0, 10, List.of());
+  }
+
+  private List<StructuredPropertySearchCatalog.IndexedProperty> indexedProperties() {
+    return new StructuredPropertySearchCatalog(
+            StructuredPropertyQueryConfiguration.builder()
+                .cacheTtlSeconds(300)
+                .defaultTextWeight(0.8f)
+                .stemmedFactor(0.5f)
+                .pageSize(500)
+                .maxProperties(1000)
+                .build())
+        .indexed(harness.opContext, List.of(dataset));
   }
 
   private static Double constantScoreBoost(JsonNode node, String field) {

@@ -12,7 +12,13 @@ import javax.annotation.Nullable;
 /** Gates for trying the light query before the full query. */
 public final class SearchTemplateLight {
   private static final Set<String> COLUMN_FIELDS =
-      Set.of("columnName", "columns", "fieldPaths", "columnDescription", "editedFieldDescriptions");
+      Set.of(
+          "columnName",
+          "fieldPaths",
+          "columnDescription",
+          "editedFieldDescriptions",
+          "name_1",
+          "description_1");
 
   private SearchTemplateLight() {}
 
@@ -54,6 +60,12 @@ public final class SearchTemplateLight {
   }
 
   private static String leaf(String field) {
+    for (String suffix : List.of(".keyword", ".lowercase")) {
+      if (field.endsWith(suffix)) {
+        field = field.substring(0, field.length() - suffix.length());
+        break;
+      }
+    }
     int dot = field.lastIndexOf('.');
     return dot < 0 ? field : field.substring(dot + 1);
   }

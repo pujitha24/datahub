@@ -4,7 +4,7 @@ import static com.linkedin.metadata.Constants.STRUCTURED_PROPERTY_MAPPING_FIELD;
 
 import com.linkedin.metadata.models.LogicalValueType;
 import com.linkedin.metadata.search.elasticsearch.query.request.SearchFieldConfig;
-import com.linkedin.metadata.search.elasticsearch.query.v3.StructuredPropertyQueryFields.Definition;
+import com.linkedin.metadata.search.elasticsearch.query.request.v3.StructuredPropertySearchCatalog;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -27,7 +27,10 @@ public final class StructuredPropertyNameValue {
 
   @Nullable
   public static QueryBuilder disMax(
-      @Nonnull String query, @Nonnull Set<SearchFieldConfig> queried, float weight) {
+      @Nonnull String query,
+      @Nonnull Set<SearchFieldConfig> queried,
+      @Nonnull List<StructuredPropertySearchCatalog.IndexedProperty> properties,
+      float weight) {
     String text = query.trim();
     if (text.isEmpty() || !(weight > 0f)) {
       return null;
@@ -35,21 +38,21 @@ public final class StructuredPropertyNameValue {
     Set<String> queriedPaths = new HashSet<>();
     for (SearchFieldConfig field : queried) {
       String base = propertyBase(field.fieldName());
-      if (base != null && !StructuredPropertyQueryFields.omitted(base)) {
+      if (base != null) {
         queriedPaths.add(base);
       }
     }
     List<Span> spans = new ArrayList<>();
-    for (Definition definition : StructuredPropertyQueryFields.catalog()) {
-      if (definition.valueType() != LogicalValueType.STRING
-          && definition.valueType() != LogicalValueType.RICH_TEXT) {
+    for (StructuredPropertySearchCatalog.IndexedProperty property : properties) {
+      if (property.valueType() != LogicalValueType.STRING
+          && property.valueType() != LogicalValueType.RICH_TEXT) {
         continue;
       }
-      if (!queriedPaths.contains(definition.fieldPath())) {
+      if (!queriedPaths.contains(property.fieldPath())) {
         continue;
       }
-      addDisplaySpans(text, definition, spans);
-      addQualifiedSpans(text, definition, spans);
+      addDisplaySpans(text, property, spans);
+      addQualifiedSpans(text, property, spans);
     }
     spans.sort(
         Comparator.comparingInt((Span span) -> span.end - span.start)
@@ -82,11 +85,13 @@ public final class StructuredPropertyNameValue {
   }
 
   private static void addDisplaySpans(
-      @Nonnull String text, @Nonnull Definition definition, @Nonnull List<Span> spans) {
-    if (definition.displayName() == null || definition.displayName().isBlank()) {
+      @Nonnull String text,
+      @Nonnull StructuredPropertySearchCatalog.IndexedProperty property,
+      @Nonnull List<Span> spans) {
+    if (property.displayName() == null || property.displayName().isBlank()) {
       return;
     }
-    String[] nameWords = definition.displayName().trim().split("\\s+");
+    String[] nameWords = property.displayName().trim().split("\\s+");
     if (nameWords.length == 0) {
       return;
     }
@@ -102,18 +107,20 @@ public final class StructuredPropertyNameValue {
         }
       }
       if (match) {
-        spans.add(new Span(words.get(i)[0], words.get(i + nameWords.length - 1)[1], definition));
+        spans.add(new Span(words.get(i)[0], words.get(i + nameWords.length - 1)[1], property));
       }
     }
   }
 
   private static void addQualifiedSpans(
-      @Nonnull String text, @Nonnull Definition definition, @Nonnull List<Span> spans) {
-    if (definition.qualifiedName().isBlank()) {
+      @Nonnull String text,
+      @Nonnull StructuredPropertySearchCatalog.IndexedProperty property,
+      @Nonnull List<Span> spans) {
+    if (property.qualifiedName().isBlank()) {
       return;
     }
     String haystack = text.toLowerCase(Locale.ROOT);
-    String needle = definition.qualifiedName().toLowerCase(Locale.ROOT);
+    String needle = property.qualifiedName().toLowerCase(Locale.ROOT);
     int from = 0;
     while (from <= haystack.length() - needle.length()) {
       int index = haystack.indexOf(needle, from);
@@ -122,7 +129,7 @@ public final class StructuredPropertyNameValue {
       }
       int end = index + needle.length();
       if (bounded(text, index, end)) {
-        spans.add(new Span(index, end, definition));
+        spans.add(new Span(index, end, property));
       }
       from = index + 1;
     }
@@ -171,11 +178,14 @@ public final class StructuredPropertyNameValue {
     if (!fieldName.startsWith(prefix)) {
       return null;
     }
-    if (fieldName.endsWith(".keyword")) {
-      return fieldName.substring(0, fieldName.length() - ".keyword".length());
+    for (String suffix : List.of(".keyword", ".text", ".stemmed")) {
+      if (fieldName.endsWith(suffix)) {
+        return fieldName.substring(0, fieldName.length() - suffix.length());
+      }
     }
     return fieldName;
   }
 
-  private record Span(int start, int end, @Nonnull Definition definition) {}
+  private record Span(
+      int start, int end, @Nonnull StructuredPropertySearchCatalog.IndexedProperty definition) {}
 }

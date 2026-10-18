@@ -13,8 +13,8 @@ record SearchFieldOverrides {
   add: optional array[SearchFieldBoost]
 
   /**
-   * Indexed field names removed from the base set. A member contribution is removed by its
-   * indexed name, such as {@code tags.member}, which leaves the direct field in the set.
+   * Indexed field names removed from the base set. A nested contribution is removed by its
+   * degree-suffixed name, such as {@code tags_1}, which leaves the direct field in the set.
    */
   remove: optional array[string]
 

@@ -10,7 +10,6 @@ import com.linkedin.common.urn.UrnUtils;
 import com.linkedin.data.template.StringArray;
 import com.linkedin.data.template.StringMap;
 import com.linkedin.metadata.TestEntitySpecBuilder;
-import com.linkedin.metadata.search.elasticsearch.query.v3.StructuredPropertyQueryFields;
 import com.linkedin.search.template.SearchFieldBoost;
 import com.linkedin.search.template.SearchFieldBoostArray;
 import com.linkedin.search.template.SearchFieldOverrides;
@@ -56,7 +55,6 @@ public class SearchTemplateValidationTest {
 
   @AfterMethod
   public void clear() {
-    StructuredPropertyQueryFields.replace(List.of());
     SearchTemplates.install(null);
   }
 

@@ -25,6 +25,8 @@ import com.linkedin.metadata.models.annotation.SearchScoreAnnotation;
 import com.linkedin.metadata.models.annotation.SearchableAnnotation;
 import com.linkedin.metadata.models.annotation.SearchableRefAnnotation;
 import com.linkedin.metadata.models.registry.EntityRegistry;
+import com.linkedin.metadata.search.elasticsearch.query.template.SearchTemplateCoordinator;
+import com.linkedin.metadata.search.elasticsearch.query.template.SearchTemplates;
 import com.linkedin.metadata.search.utils.ESUtils;
 import io.datahubproject.metadata.context.OperationContext;
 import java.util.ArrayList;
@@ -91,6 +93,10 @@ public class SearchQueryBuilder {
       @Nonnull List<EntitySpec> entitySpecs,
       @Nonnull String query,
       boolean fulltext) {
+    SearchTemplateCoordinator coordinator = SearchTemplates.current();
+    if (coordinator != null && coordinator.active()) {
+      return buildPlan(opContext, entitySpecs, query, fulltext, null, false).query();
+    }
     return buildQuery(opContext, entitySpecs, query, fulltext, false);
   }
 
@@ -121,6 +127,35 @@ public class SearchQueryBuilder {
       return null;
     }
     return buildScoreFunctions(opContext, customQueryConfig, entitySpecs, query, queryBuilder);
+  }
+
+  @Nonnull
+  public SearchQueryPlan buildPlan(
+      @Nonnull OperationContext opContext,
+      @Nonnull List<EntitySpec> entitySpecs,
+      @Nonnull String query,
+      boolean fulltext,
+      @Nullable String renderUrn,
+      boolean scroll) {
+    SearchTemplateCoordinator coordinator = SearchTemplates.current();
+    if (coordinator != null && coordinator.active()) {
+      if (searchValidationConfiguration.isEnabled()) {
+        validateSearchQuery(query);
+      }
+      OperationContext bound =
+          opContext.getSearchContext().getResolvedSearchTemplate() != null
+              ? opContext
+              : coordinator.bind(
+                  opContext, query, scroll, entitySpecs.stream().map(EntitySpec::getName).toList());
+      var rendered =
+          coordinator.queryBuilder().render(bound, entitySpecs, query, fulltext, renderUrn, scroll);
+      return new SearchQueryPlan(rendered.query(), rendered);
+    }
+    QueryBuilder queryBuilder = buildQuery(opContext, entitySpecs, query, fulltext, false);
+    if (queryBuilder == null) {
+      throw new IllegalStateException("Search query produced no clause");
+    }
+    return SearchQueryPlan.legacy(queryBuilder);
   }
 
   /**

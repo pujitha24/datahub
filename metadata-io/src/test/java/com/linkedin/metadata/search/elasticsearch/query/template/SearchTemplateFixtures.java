@@ -1,5 +1,6 @@
 package com.linkedin.metadata.search.elasticsearch.query.template;
 
+import static com.linkedin.metadata.Constants.CORP_USER_KEY_ASPECT_NAME;
 import static com.linkedin.metadata.Constants.SEARCH_TEMPLATE_FULLTEXT_URN;
 import static com.linkedin.metadata.Constants.SEARCH_TEMPLATE_PROPERTIES_ASPECT_NAME;
 import static com.linkedin.metadata.Constants.STRUCTURED_PROPERTY_DEFINITION_ASPECT_NAME;
@@ -16,15 +17,20 @@ import com.linkedin.common.urn.UrnUtils;
 import com.linkedin.data.template.StringArray;
 import com.linkedin.datahub.DataHubSearchConfig;
 import com.linkedin.entity.Aspect;
+import com.linkedin.identity.CorpUserInfo;
 import com.linkedin.metadata.aspect.CachingAspectRetriever;
+import com.linkedin.metadata.aspect.GraphRetriever;
 import com.linkedin.metadata.config.search.ElasticSearchConfiguration;
 import com.linkedin.metadata.config.search.EntityIndexConfiguration;
 import com.linkedin.metadata.config.search.EntityIndexVersionConfiguration;
 import com.linkedin.metadata.config.search.SearchConfiguration;
 import com.linkedin.metadata.config.search.SearchTemplateConfiguration;
 import com.linkedin.metadata.config.search.SearchV3Configuration;
+import com.linkedin.metadata.entity.SearchRetriever;
 import com.linkedin.metadata.models.registry.EntityRegistry;
-import com.linkedin.metadata.search.elasticsearch.query.v3.StructuredPropertyQueryFields;
+import com.linkedin.metadata.search.ScrollResult;
+import com.linkedin.metadata.search.SearchEntity;
+import com.linkedin.metadata.search.SearchEntityArray;
 import com.linkedin.search.template.SearchFieldBoost;
 import com.linkedin.search.template.SearchFieldBoostArray;
 import com.linkedin.search.template.SearchFieldOverrides;
@@ -32,8 +38,8 @@ import com.linkedin.search.template.SearchTemplateDialect;
 import com.linkedin.search.template.SearchTemplateProperties;
 import com.linkedin.search.template.StructuredPropertyQuery;
 import com.linkedin.structured.StructuredPropertyDefinition;
-import com.linkedin.util.Pair;
 import io.datahubproject.metadata.context.OperationContext;
+import io.datahubproject.metadata.context.RetrieverContext;
 import io.datahubproject.test.metadata.context.TestOperationContexts;
 import java.io.IOException;
 import java.io.InputStream;
@@ -66,7 +72,6 @@ public final class SearchTemplateFixtures {
       @Nonnull String valueType,
       @Nonnull List<String> entityTypes,
       boolean queryByDefault,
-      boolean fullTextSearch,
       double boostScore,
       @Nullable String displayName,
       @Nullable String version,
@@ -82,6 +87,7 @@ public final class SearchTemplateFixtures {
     public SearchTemplateConfiguration templates;
     public SearchTemplateLoader loader;
     public EntityRegistry registry;
+    public SearchRetriever searchRetriever;
 
     public void setup() {
       definitions.clear();
@@ -90,6 +96,7 @@ public final class SearchTemplateFixtures {
       SearchTemplates.install(null);
       registry = TestOperationContexts.systemContextNoSearchAuthorization().getEntityRegistry();
       retriever = Mockito.mock(CachingAspectRetriever.class);
+      searchRetriever = Mockito.mock(SearchRetriever.class);
       Mockito.when(retriever.getEntityRegistry()).thenReturn(registry);
       Mockito.when(retriever.getLatestAspectObject(Mockito.any(), Mockito.any(), Mockito.any()))
           .thenAnswer(
@@ -114,6 +121,17 @@ public final class SearchTemplateFixtures {
                 Map<Urn, Map<String, Aspect>> result = new HashMap<>();
                 for (Urn urn : urns) {
                   Map<String, Aspect> byAspect = new HashMap<>();
+                  if (aspects.contains(CORP_USER_KEY_ASPECT_NAME)
+                      && "corpuser".equals(urn.getEntityType())) {
+                    byAspect.put(
+                        CORP_USER_KEY_ASPECT_NAME,
+                        new Aspect(
+                            new CorpUserInfo()
+                                .setActive(true)
+                                .setEmail(urn.getId())
+                                .setDisplayName(urn.getId())
+                                .data()));
+                  }
                   if (aspects.contains(STRUCTURED_PROPERTY_DEFINITION_ASPECT_NAME)) {
                     StructuredPropertyDefinition definition = definitions.get(urn);
                     if (definition != null) {
@@ -126,8 +144,33 @@ public final class SearchTemplateFixtures {
                 }
                 return result;
               });
+      Mockito.when(
+              searchRetriever.scroll(
+                  Mockito.anyList(),
+                  Mockito.any(),
+                  Mockito.any(),
+                  Mockito.anyInt(),
+                  Mockito.anyList(),
+                  Mockito.any()))
+          .thenAnswer(
+              invocation ->
+                  new ScrollResult()
+                      .setEntities(
+                          new SearchEntityArray(
+                              definitions.keySet().stream()
+                                  .map(urn -> new SearchEntity().setEntity(urn))
+                                  .toList()))
+                      .setNumEntities(definitions.size())
+                      .setPageSize(definitions.size()));
+      RetrieverContext retrieverContext =
+          RetrieverContext.builder()
+              .aspectRetriever(retriever)
+              .cachingAspectRetriever(retriever)
+              .graphRetriever(GraphRetriever.EMPTY)
+              .searchRetriever(searchRetriever)
+              .build();
       opContext =
-          TestOperationContexts.systemContextNoSearchAuthorization(retriever)
+          TestOperationContexts.systemContextNoSearchAuthorization(retrieverContext)
               .withSearchFlags(flags -> flags.setFulltext(true));
       templates = new SearchTemplateConfiguration();
       templates.setEnabled(true);
@@ -146,10 +189,6 @@ public final class SearchTemplateFixtures {
         properties.add(property);
         definitions.put(UrnUtils.getUrn(property.urn()), property.definition());
       }
-      StructuredPropertyQueryFields.replace(
-          definitions.entrySet().stream()
-              .map(entry -> Pair.of(entry.getKey(), entry.getValue()))
-              .toList());
     }
 
     public void installShippedTemplates() {
@@ -245,7 +284,6 @@ public final class SearchTemplateFixtures {
     List<String> entityTypes =
         ((List<Object>) row.get("entityTypes")).stream().map(String::valueOf).toList();
     boolean queryByDefault = Boolean.TRUE.equals(row.get("queryByDefault"));
-    boolean fullTextSearch = Boolean.TRUE.equals(row.get("fullTextSearch"));
     double boost =
         row.get("boostScore") == null ? 1.0 : ((Number) row.get("boostScore")).doubleValue();
     String displayName =
@@ -263,15 +301,10 @@ public final class SearchTemplateFixtures {
     if (version != null) {
       definition.setVersion(version);
     }
-    if (row.containsKey("queryByDefault")
-        || row.containsKey("boostScore")
-        || row.containsKey("fullTextSearch")) {
+    if (row.containsKey("queryByDefault") || row.containsKey("boostScore")) {
       DataHubSearchConfig config = new DataHubSearchConfig();
       config.setQueryByDefault(queryByDefault);
       config.setBoostScore(boost);
-      if (row.containsKey("fullTextSearch")) {
-        config.setFullTextSearch(fullTextSearch);
-      }
       definition.setSearchConfiguration(config);
     }
     Urn parsed = UrnUtils.getUrn(urn);
@@ -283,7 +316,6 @@ public final class SearchTemplateFixtures {
         valueType,
         entityTypes,
         queryByDefault,
-        fullTextSearch,
         boost,
         displayName,
         version,

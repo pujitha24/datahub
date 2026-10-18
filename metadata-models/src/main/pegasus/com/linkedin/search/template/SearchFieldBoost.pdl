@@ -6,9 +6,9 @@ namespace com.linkedin.search.template
 record SearchFieldBoost {
   /**
    * Indexed field name, or a structured-property definition URN. A subfield is separate.
-   * A member contribution is the shared field plus {@code .member}, such as {@code tags.member}
-   * for tags that live on a dataset's columns. {@code tags} is the direct contribution, the
-   * value on the entity itself. Each contribution has its own boost.
+   * A nested contribution uses its degree-suffixed indexed name, such as {@code tags_1} for tags
+   * that live one relationship away from the entity. {@code tags} is the direct contribution.
+   * Each degree has its own boost.
    */
   fieldName: string
 
@@ -18,8 +18,8 @@ record SearchFieldBoost {
   boost: double
 
   /**
-   * Subfield appended after a structured-property field. The only value is {@code keyword}.
-   * The query body names {@code .keyword} or {@code .text}.
+   * Subfield appended after a structured-property field. Valid values are {@code keyword} and
+   * {@code text}.
    */
   subfield: optional string
 }

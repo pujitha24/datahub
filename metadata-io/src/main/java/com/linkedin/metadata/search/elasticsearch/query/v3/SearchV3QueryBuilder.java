@@ -5,17 +5,20 @@ import static com.linkedin.metadata.Constants.STRUCTURED_PROPERTY_MAPPING_FIELD;
 import com.linkedin.metadata.config.search.ExactMatchConfiguration;
 import com.linkedin.metadata.config.search.PartialConfiguration;
 import com.linkedin.metadata.config.search.SearchConfiguration;
+import com.linkedin.metadata.config.search.StructuredPropertyQueryConfiguration;
 import com.linkedin.metadata.config.search.WordGramConfiguration;
 import com.linkedin.metadata.config.search.custom.CustomSearchConfiguration;
 import com.linkedin.metadata.models.EntitySpec;
-import com.linkedin.metadata.models.LogicalValueType;
 import com.linkedin.metadata.models.StructuredPropertyUtils;
 import com.linkedin.metadata.models.annotation.SearchScoreAnnotation;
 import com.linkedin.metadata.query.SearchFlags;
+import com.linkedin.metadata.search.elasticsearch.index.entity.v3.SearchFieldResolver;
+import com.linkedin.metadata.search.elasticsearch.index.entity.v3.V3SearchFields;
 import com.linkedin.metadata.search.elasticsearch.query.request.CustomizedQueryHandler;
 import com.linkedin.metadata.search.elasticsearch.query.request.SearchFieldConfig;
 import com.linkedin.metadata.search.elasticsearch.query.request.SearchQueryBuilder;
-import com.linkedin.metadata.search.elasticsearch.query.request.V3SearchQueryBuilder;
+import com.linkedin.metadata.search.elasticsearch.query.request.v3.StructuredPropertySearchCatalog;
+import com.linkedin.metadata.search.elasticsearch.query.request.v3.V3SearchQueryBuilder;
 import com.linkedin.metadata.search.elasticsearch.query.template.MergedSearchTemplate;
 import com.linkedin.metadata.search.elasticsearch.query.template.SearchTemplateDialects;
 import com.linkedin.metadata.search.elasticsearch.query.template.SearchTemplateException;
@@ -25,6 +28,7 @@ import com.linkedin.metadata.search.elasticsearch.query.template.SearchTemplateL
 import com.linkedin.metadata.search.elasticsearch.query.template.SearchTemplateQueryShape;
 import com.linkedin.metadata.search.elasticsearch.query.template.SearchTemplateViewer;
 import com.linkedin.metadata.search.elasticsearch.query.template.StructuredPropertyReferences;
+import com.linkedin.metadata.search.utils.ESUtils;
 import com.linkedin.search.template.SearchTemplateBoost;
 import com.linkedin.search.template.SearchTemplateBoostArray;
 import com.linkedin.search.template.SearchTemplateDialect;
@@ -32,18 +36,20 @@ import com.linkedin.search.template.StructuredPropertyQuery;
 import io.datahubproject.metadata.context.OperationContext;
 import io.datahubproject.metadata.context.ResolvedSearchTemplate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.Operator;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.index.query.SimpleQueryStringBuilder;
 import org.opensearch.search.aggregations.AggregationBuilder;
 import org.opensearch.search.rescore.QueryRescorerBuilder;
 import org.opensearch.search.sort.SortBuilder;
@@ -53,6 +59,7 @@ public class SearchV3QueryBuilder {
   private final SearchTemplateLoader loader;
   private final SearchConfiguration searchConfiguration;
   private final V3SearchQueryBuilder keywordQueryBuilder;
+  private final StructuredPropertySearchCatalog structuredPropertySearchCatalog;
 
   public SearchV3QueryBuilder(
       @Nonnull SearchTemplateLoader loader,
@@ -60,8 +67,51 @@ public class SearchV3QueryBuilder {
       @Nullable CustomSearchConfiguration customSearchConfiguration) {
     this.loader = loader;
     this.searchConfiguration = searchConfiguration;
+    if (searchConfiguration.getExactMatch() == null) {
+      ExactMatchConfiguration exactMatch = new ExactMatchConfiguration();
+      exactMatch.setExclusive(false);
+      exactMatch.setWithPrefix(true);
+      exactMatch.setExactFactor(16f);
+      exactMatch.setPrefixFactor(1.1f);
+      exactMatch.setCaseSensitivityFactor(0f);
+      exactMatch.setEnableStructured(true);
+      searchConfiguration.setExactMatch(exactMatch);
+    }
+    if (searchConfiguration.getPartial() == null) {
+      PartialConfiguration partial = new PartialConfiguration();
+      partial.setUrnFactor(0.5f);
+      partial.setFactor(0.4f);
+      searchConfiguration.setPartial(partial);
+    }
+    if (searchConfiguration.getWordGram() == null) {
+      WordGramConfiguration wordGram = new WordGramConfiguration();
+      wordGram.setTwoGramFactor(1.2f);
+      wordGram.setThreeGramFactor(1.5f);
+      wordGram.setFourGramFactor(1.8f);
+      searchConfiguration.setWordGram(wordGram);
+    }
+    if (searchConfiguration.getStructuredProperties() == null) {
+      searchConfiguration.setStructuredProperties(structuredPropertyConfig(searchConfiguration));
+    }
     this.keywordQueryBuilder =
         new V3SearchQueryBuilder(searchConfiguration, customSearchConfiguration);
+    this.structuredPropertySearchCatalog =
+        new StructuredPropertySearchCatalog(structuredPropertyConfig(searchConfiguration));
+  }
+
+  @Nonnull
+  private static StructuredPropertyQueryConfiguration structuredPropertyConfig(
+      @Nonnull SearchConfiguration searchConfiguration) {
+    if (searchConfiguration.getStructuredProperties() != null) {
+      return searchConfiguration.getStructuredProperties();
+    }
+    return StructuredPropertyQueryConfiguration.builder()
+        .cacheTtlSeconds(300)
+        .defaultTextWeight(0.8f)
+        .stemmedFactor(0.5f)
+        .pageSize(500)
+        .maxProperties(1000)
+        .build();
   }
 
   @Nonnull
@@ -71,6 +121,11 @@ public class SearchV3QueryBuilder {
       @Nonnull String query,
       boolean fulltext) {
     return render(opContext, entitySpecs, query, fulltext, null, false).query();
+  }
+
+  @Nonnull
+  public String structuredPropertyCatalogStamp(@Nonnull OperationContext opContext) {
+    return structuredPropertySearchCatalog.catalogStamp(opContext);
   }
 
   @Nonnull
@@ -97,16 +152,15 @@ public class SearchV3QueryBuilder {
     SearchFlags flags = opContext.getSearchContext().getSearchFlags();
 
     List<SearchFieldConfig> base =
-        new ArrayList<>(keywordQueryBuilder.searchedFieldConfigs(opContext, entitySpecs));
+        keywordQueryBuilder.searchedFieldConfigs(opContext, entitySpecs).stream()
+            .sorted(
+                Comparator.comparing(SearchFieldConfig::fieldName)
+                    .thenComparing(field -> field.analyzer() == null ? "" : field.analyzer())
+                    .thenComparing(SearchFieldConfig::boost))
+            .toList();
     boolean bridge = template.isClasspathBridge();
-    if (!bridge) {
-      for (SearchFieldConfig property :
-          StructuredPropertyQueryFields.fieldsFor(entityTypeNames(entitySpecs))) {
-        if (base.stream().noneMatch(field -> field.fieldName().equals(property.fieldName()))) {
-          base.add(property);
-        }
-      }
-    }
+    List<StructuredPropertySearchCatalog.IndexedProperty> properties =
+        bridge ? List.of() : structuredPropertySearchCatalog.indexed(opContext, entitySpecs);
     StructuredPropertyReferences.Resolver resolver =
         bridge
             ? StructuredPropertyReferences.omitting()
@@ -134,7 +188,8 @@ public class SearchV3QueryBuilder {
             ? QueryBuilders.matchAllQuery()
             : SearchTemplateJson.parseQuery(renderedQuery);
     if (!template.isClasspathBridge()) {
-      built = propertyClauses(built, queried, query, template.getStructuredPropertyQuery());
+      built =
+          propertyClauses(built, queried, properties, query, template.getStructuredPropertyQuery());
     }
     if (template.getClauses() != null) {
       built =
@@ -193,7 +248,7 @@ public class SearchV3QueryBuilder {
         highlights,
         queriedFields,
         query,
-        SearchTemplateMatchReport.namedClauses(built));
+        SearchTemplateMatchReport.namedClauses(built, properties));
   }
 
   @Nonnull
@@ -227,25 +282,49 @@ public class SearchV3QueryBuilder {
     List<String> analyzed = defaultQueryFields(queried);
     List<String> identityFields = SearchTemplateFields.identityAnalyzedFields(queriedFields);
     List<String> lightFields = shape.nameOnly ? identityFields : analyzed;
+    SearchFieldResolver fieldResolver =
+        new SearchFieldResolver(
+            V3SearchFields.indexGroupSpecs(opContext.getEntityRegistry(), entitySpecs));
     Map<String, Object> context = new LinkedHashMap<>();
     context.put("defaultQueryFields", analyzed);
     context.put("defaultQueryFieldsJson", SearchTemplateMustache.json(analyzed));
     context.put("identityQueryFieldsJson", SearchTemplateMustache.json(identityFields));
     context.put("lightFieldsJson", SearchTemplateMustache.json(lightFields));
     context.put("lightOperator", shape.deepPath || shape.longExactName ? "AND" : "OR");
-    context.put("entityNameField", SearchTemplateFields.keywordPath("name"));
-    context.put("descriptionField", SearchTemplateFields.textPath("description"));
-    context.put("platformField", SearchTemplateFields.PLATFORM_FIELD);
-    context.put("columnNameField", SearchTemplateFields.keywordPath("columns"));
-    context.put("urnField", SearchTemplateFields.URN_FIELD);
-    context.put("nameKeyword", SearchTemplateFields.keywordPath("name"));
-    context.put("nameText", SearchTemplateFields.textPath("name"));
-    context.put("qualifiedNameKeyword", SearchTemplateFields.keywordPath("qualifiedName"));
-    context.put("qualifiedNameText", SearchTemplateFields.textPath("qualifiedName"));
-    context.put("qualifiedNameIdentity", "qualifiedName");
-    context.put("descriptionText", SearchTemplateFields.textPath("description"));
-    context.put("idKeyword", "id.keyword");
-    context.put("urnKeyword", SearchTemplateFields.URN_FIELD);
+    context.put(
+        "entityNameField",
+        exactPath(fieldResolver, "name", SearchFieldResolver.Intent.EXACT, "name.keyword"));
+    context.put("descriptionField", analyzedPath(fieldResolver, "description"));
+    context.put(
+        "platformField",
+        exactPath(fieldResolver, "platform", SearchFieldResolver.Intent.FILTER, "platform_urn"));
+    context.put(
+        "columnNameField",
+        exactPath(fieldResolver, "fieldPaths", SearchFieldResolver.Intent.EXACT, "name_1.keyword"));
+    String urnExact = exactPath(fieldResolver, "urn", SearchFieldResolver.Intent.EXACT, "urn");
+    context.put("urnField", urnExact);
+    context.put("urnExactField", urnExact);
+    context.put("urnFoldedField", fieldResolver.lowercaseFullUrnPath("urn"));
+    context.put("urnParsedField", analyzedPath(fieldResolver, "urn_name"));
+    context.put("normalizedKeyword", ESUtils.keywordNormalize(unquoted));
+    context.put(
+        "nameKeyword",
+        exactPath(fieldResolver, "name", SearchFieldResolver.Intent.EXACT, "name.keyword"));
+    context.put("nameText", analyzedPath(fieldResolver, "name"));
+    context.put(
+        "qualifiedNameKeyword",
+        exactPath(
+            fieldResolver,
+            "qualifiedName",
+            SearchFieldResolver.Intent.EXACT,
+            "qualifiedName.keyword"));
+    context.put("qualifiedNameText", analyzedPath(fieldResolver, "qualifiedName"));
+    context.put("qualifiedNameIdentity", analyzedPath(fieldResolver, "qualifiedName"));
+    context.put("descriptionText", analyzedPath(fieldResolver, "description"));
+    context.put(
+        "idKeyword",
+        exactPath(fieldResolver, "id", SearchFieldResolver.Intent.EXACT, "id.keyword"));
+    context.put("urnKeyword", urnExact);
     context.put("entityTypes", entityTypeNames(entitySpecs));
     putScoreFunctions(context, entitySpecs);
     context.put("query", !structured && !shape.normalized.isEmpty() ? shape.normalized : text);
@@ -509,6 +588,31 @@ public class SearchV3QueryBuilder {
     return Double.parseDouble(Float.toString(value));
   }
 
+  @Nonnull
+  private static String exactPath(
+      @Nonnull SearchFieldResolver resolver,
+      @Nonnull String field,
+      @Nonnull SearchFieldResolver.Intent intent,
+      @Nonnull String fallback) {
+    return resolver.supports(field, intent) ? resolver.exactPath(field, intent) : fallback;
+  }
+
+  @Nonnull
+  private static String analyzedPath(@Nonnull SearchFieldResolver resolver, @Nonnull String field) {
+    if (!resolver.supports(field, SearchFieldResolver.Intent.FULL_TEXT)) {
+      return field + ".text";
+    }
+    SearchFieldResolver.Field resolved =
+        resolver.resolve(field, SearchFieldResolver.Intent.FULL_TEXT);
+    if (resolved.getSubfields().contains(V3SearchFields.TEXT)) {
+      return resolved.getPath() + "." + V3SearchFields.TEXT;
+    }
+    if (resolved.getSubfields().contains(V3SearchFields.STEMMED)) {
+      return resolved.getPath() + "." + V3SearchFields.STEMMED;
+    }
+    return resolved.getPath();
+  }
+
   /**
    * String, rich-text, and URN properties match as one whole term. Name-and-value matching adds one
    * {@code dis_max} for string and rich-text properties still in the queried set. Both join the
@@ -519,10 +623,13 @@ public class SearchV3QueryBuilder {
   private static QueryBuilder propertyClauses(
       @Nonnull QueryBuilder built,
       @Nonnull Set<SearchFieldConfig> queried,
+      @Nonnull List<StructuredPropertySearchCatalog.IndexedProperty> properties,
       @Nonnull String query,
       @Nullable StructuredPropertyQuery structuredPropertyQuery) {
-    List<QueryBuilder> extras = new ArrayList<>(valueTerms(queried, query));
-    QueryBuilder nameAndValue = nameAndValue(queried, query, structuredPropertyQuery);
+    List<QueryBuilder> extras =
+        new ArrayList<>(analyzedPropertyQueries(queried, properties, query));
+    extras.addAll(valueTerms(queried, properties, query));
+    QueryBuilder nameAndValue = nameAndValue(queried, properties, query, structuredPropertyQuery);
     if (nameAndValue != null) {
       extras.add(nameAndValue);
     }
@@ -536,8 +643,37 @@ public class SearchV3QueryBuilder {
   }
 
   @Nonnull
+  private static List<QueryBuilder> analyzedPropertyQueries(
+      @Nonnull Set<SearchFieldConfig> queried,
+      @Nonnull List<StructuredPropertySearchCatalog.IndexedProperty> properties,
+      @Nonnull String query) {
+    Map<String, List<SearchFieldConfig>> byAnalyzer =
+        queried.stream()
+            .filter(field -> property(properties, field.fieldName()) != null)
+            .filter(
+                field ->
+                    field.fieldName().endsWith(".text") || field.fieldName().endsWith(".stemmed"))
+            .filter(field -> field.analyzer() != null)
+            .collect(java.util.stream.Collectors.groupingBy(SearchFieldConfig::analyzer));
+    List<QueryBuilder> clauses = new ArrayList<>();
+    byAnalyzer.forEach(
+        (analyzer, fields) -> {
+          SimpleQueryStringBuilder clause =
+              QueryBuilders.simpleQueryStringQuery(query)
+                  .analyzer(analyzer)
+                  .defaultOperator(Operator.OR)
+                  .lenient(true);
+          fields.forEach(field -> clause.field(field.fieldName(), field.boost()));
+          clauses.add(clause);
+        });
+    return clauses;
+  }
+
+  @Nonnull
   private static List<QueryBuilder> valueTerms(
-      @Nonnull Set<SearchFieldConfig> queried, @Nonnull String query) {
+      @Nonnull Set<SearchFieldConfig> queried,
+      @Nonnull List<StructuredPropertySearchCatalog.IndexedProperty> properties,
+      @Nonnull String query) {
     String text = CustomizedQueryHandler.unquote(query);
     SearchTemplateQueryShape shape = SearchTemplateQueryShape.of(text);
     String termValue = shape.nameOnly ? shape.raw : query.trim();
@@ -545,27 +681,30 @@ public class SearchV3QueryBuilder {
       return List.of();
     }
     List<QueryBuilder> terms = new ArrayList<>();
-    Set<String> seen = new HashSet<>();
+    Map<StructuredPropertySearchCatalog.IndexedProperty, Float> selected = new LinkedHashMap<>();
     for (SearchFieldConfig field : queried) {
-      String base = propertyBase(field.fieldName());
-      if (base == null || !seen.add(base) || StructuredPropertyQueryFields.omitted(base)) {
-        continue;
+      StructuredPropertySearchCatalog.IndexedProperty property =
+          property(properties, field.fieldName());
+      if (property != null) {
+        float boost = field.boost() == null ? 1f : field.boost();
+        selected.merge(property, boost, Math::max);
       }
-      Optional<LogicalValueType> type = StructuredPropertyQueryFields.valueType(base);
-      if (type.isEmpty() || !wholeValue(type.get())) {
-        continue;
-      }
-      String termField =
-          StructuredPropertyUtils.usesKeywordSubfield(type.get()) ? base + ".keyword" : base;
-      float boost = field.boost() == null ? 1f : field.boost();
-      terms.add(QueryBuilders.termQuery(termField, termValue).boost(boost));
     }
+    selected.forEach(
+        (property, boost) -> {
+          String termField =
+              StructuredPropertyUtils.usesKeywordSubfield(property.valueType())
+                  ? property.fieldPath() + ".keyword"
+                  : property.fieldPath();
+          terms.add(QueryBuilders.termQuery(termField, termValue).boost(boost));
+        });
     return terms;
   }
 
   @Nullable
   private static QueryBuilder nameAndValue(
       @Nonnull Set<SearchFieldConfig> queried,
+      @Nonnull List<StructuredPropertySearchCatalog.IndexedProperty> properties,
       @Nonnull String query,
       @Nullable StructuredPropertyQuery structuredPropertyQuery) {
     if (structuredPropertyQuery == null || !structuredPropertyQuery.hasNameAndValueWeight()) {
@@ -575,7 +714,7 @@ public class SearchV3QueryBuilder {
     if (weight == null) {
       return null;
     }
-    return StructuredPropertyNameValue.disMax(query, queried, weight);
+    return StructuredPropertyNameValue.disMax(query, queried, properties, weight);
   }
 
   @Nonnull
@@ -583,14 +722,6 @@ public class SearchV3QueryBuilder {
     List<String> names = new ArrayList<>();
     Set<String> seen = new HashSet<>();
     for (SearchFieldConfig field : queried) {
-      String base = propertyBase(field.fieldName());
-      if (base != null) {
-        Optional<LogicalValueType> type = StructuredPropertyQueryFields.valueType(base);
-        if (type.isPresent() && wholeValue(type.get()) && seen.add(base)) {
-          names.add(base);
-        }
-        continue;
-      }
       if (seen.add(field.fieldName())) {
         names.add(field.fieldName());
       }
@@ -621,7 +752,25 @@ public class SearchV3QueryBuilder {
     if (fieldName.endsWith(".text")) {
       return fieldName.substring(0, fieldName.length() - ".text".length());
     }
+    if (fieldName.endsWith(".stemmed")) {
+      return fieldName.substring(0, fieldName.length() - ".stemmed".length());
+    }
     return fieldName;
+  }
+
+  @Nullable
+  private static StructuredPropertySearchCatalog.IndexedProperty property(
+      @Nonnull List<StructuredPropertySearchCatalog.IndexedProperty> properties,
+      @Nonnull String fieldName) {
+    for (StructuredPropertySearchCatalog.IndexedProperty property : properties) {
+      if (fieldName.equals(property.fieldPath())
+          || fieldName.startsWith(property.fieldPath() + ".")
+          || fieldName.equals(property.fullTextPath())
+          || fieldName.startsWith(property.fullTextPath() + ".")) {
+        return property;
+      }
+    }
+    return null;
   }
 
   @Nonnull
@@ -650,11 +799,5 @@ public class SearchV3QueryBuilder {
   private static String indexedBase(@Nonnull String fieldName) {
     String base = propertyBase(fieldName);
     return base == null ? fieldName : base;
-  }
-
-  private static boolean wholeValue(@Nonnull LogicalValueType type) {
-    return type == LogicalValueType.STRING
-        || type == LogicalValueType.RICH_TEXT
-        || type == LogicalValueType.URN;
   }
 }

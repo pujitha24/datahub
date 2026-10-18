@@ -9,7 +9,6 @@
   entityTypes: [dataset]
   queryByDefault: false
   boostScore: 4.0
-  fullTextSearch: true
 - urn: urn:li:structuredProperty:certification.status
   qualifiedName: certification.status
   valueType: string

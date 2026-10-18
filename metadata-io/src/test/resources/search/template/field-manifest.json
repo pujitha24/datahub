@@ -4,7 +4,6 @@
     "datasetSearch" : "leftOut",
     "entityTypes" : [ "dataset" ],
     "fieldPath" : "structuredProperties.notes_internal",
-    "fullTextSearch" : false,
     "qualifiedName" : "notes.internal",
     "queryByDefault" : false,
     "valueType" : "string"
@@ -13,7 +12,6 @@
     "datasetSearch" : "leftOut",
     "entityTypes" : [ "dataset" ],
     "fieldPath" : "structuredProperties.hidden_label",
-    "fullTextSearch" : true,
     "qualifiedName" : "hidden.label",
     "queryByDefault" : false,
     "valueType" : "string"
@@ -23,7 +21,6 @@
     "displayName" : "Certification Status",
     "entityTypes" : [ "dataset" ],
     "fieldPath" : "structuredProperties.certification_status",
-    "fullTextSearch" : false,
     "qualifiedName" : "certification.status",
     "queryByDefault" : true,
     "valueType" : "string"
@@ -33,7 +30,6 @@
     "displayName" : "Summary Notes",
     "entityTypes" : [ "dataset" ],
     "fieldPath" : "structuredProperties.summary_notes",
-    "fullTextSearch" : false,
     "qualifiedName" : "summary.notes",
     "queryByDefault" : true,
     "valueType" : "rich_text"
@@ -42,7 +38,6 @@
     "datasetSearch" : "valueTerm",
     "entityTypes" : [ "dataset" ],
     "fieldPath" : "structuredProperties.owner_ref",
-    "fullTextSearch" : false,
     "qualifiedName" : "owner.ref",
     "queryByDefault" : true,
     "valueType" : "urn"
@@ -51,7 +46,6 @@
     "datasetSearch" : "notWholeValue",
     "entityTypes" : [ "dataset" ],
     "fieldPath" : "structuredProperties.priority_rank",
-    "fullTextSearch" : false,
     "qualifiedName" : "priority.rank",
     "queryByDefault" : true,
     "valueType" : "number"
@@ -60,7 +54,6 @@
     "datasetSearch" : "notWholeValue",
     "entityTypes" : [ "dataset" ],
     "fieldPath" : "structuredProperties.due_on",
-    "fullTextSearch" : false,
     "qualifiedName" : "due.on",
     "queryByDefault" : true,
     "valueType" : "date"
@@ -70,7 +63,6 @@
     "displayName" : "Contract Id",
     "entityTypes" : [ "dataset" ],
     "fieldPath" : "structuredProperties._versioned.contract_id.00000000000001.string",
-    "fullTextSearch" : false,
     "qualifiedName" : "contract.id",
     "queryByDefault" : true,
     "valueType" : "string",
@@ -81,7 +73,6 @@
     "displayName" : "Chart Only",
     "entityTypes" : [ "chart" ],
     "fieldPath" : "structuredProperties.chart_only",
-    "fullTextSearch" : false,
     "qualifiedName" : "chart.only",
     "queryByDefault" : true,
     "valueType" : "string"
@@ -104,7 +95,7 @@
         "boost" : 1.0,
         "field" : "description"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       }, {
         "boost" : 1.0,
@@ -131,7 +122,7 @@
         "boost" : 1.0,
         "field" : "platform"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       }, {
         "boost" : 10.0,
@@ -159,16 +150,13 @@
         "field" : "tags"
       }, {
         "boost" : 1.0,
-        "field" : "columns"
-      }, {
-        "boost" : 0.5,
-        "field" : "glossaryTerms"
-      }, {
-        "boost" : 1.0,
         "field" : "platformInstance"
       }, {
         "boost" : 1.0,
         "field" : "platform"
+      }, {
+        "boost" : 0.5,
+        "field" : "glossaryTerms"
       } ]
     },
     "application" : {
@@ -179,7 +167,7 @@
         "boost" : 0.5,
         "field" : "tags"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       }, {
         "boost" : 10.0,
@@ -194,9 +182,6 @@
     },
     "assertion" : {
       "queryFields" : [ {
-        "boost" : 0.20000000298023224,
-        "field" : "columns"
-      }, {
         "boost" : 1.0,
         "field" : "scope"
       }, {
@@ -209,15 +194,6 @@
         "boost" : 1.0,
         "field" : "customProperties"
       }, {
-        "boost" : 0.5,
-        "field" : "glossaryTerms"
-      }, {
-        "boost" : 0.5,
-        "field" : "tags"
-      }, {
-        "boost" : 0.10000000149011612,
-        "field" : "description"
-      }, {
         "boost" : 1.0,
         "field" : "aggregation"
       }, {
@@ -228,6 +204,9 @@
         "field" : "scheduleType"
       }, {
         "boost" : 1.0,
+        "field" : "description"
+      }, {
+        "boost" : 1.0,
         "field" : "platformInstance"
       }, {
         "boost" : 1.0,
@@ -235,6 +214,9 @@
       }, {
         "boost" : 1.0,
         "field" : "type"
+      }, {
+        "boost" : 0.5,
+        "field" : "tags"
       } ]
     },
     "businessAttribute" : {
@@ -251,7 +233,7 @@
         "boost" : 0.5,
         "field" : "glossaryTerms"
       }, {
-        "boost" : 0.10000000149011612,
+        "boost" : 1.0,
         "field" : "description"
       } ]
     },
@@ -263,20 +245,14 @@
         "boost" : 0.5,
         "field" : "tags"
       }, {
-        "boost" : 0.10000000149011612,
-        "field" : "description"
-      }, {
-        "boost" : 0.20000000298023224,
-        "field" : "columns"
-      }, {
-        "boost" : 0.5,
-        "field" : "glossaryTerms"
-      }, {
         "boost" : 1.0,
         "field" : "customProperties"
       }, {
         "boost" : 10.0,
         "field" : "name"
+      }, {
+        "boost" : 1.0,
+        "field" : "description"
       }, {
         "boost" : 1.0,
         "field" : "domains"
@@ -289,6 +265,9 @@
       }, {
         "boost" : 1.0,
         "field" : "platform"
+      }, {
+        "boost" : 0.5,
+        "field" : "glossaryTerms"
       }, {
         "boost" : 4.0,
         "field" : "tool"
@@ -320,7 +299,7 @@
         "boost" : 1.0,
         "field" : "description"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       }, {
         "boost" : 10.0,
@@ -351,7 +330,7 @@
     "corpuser" : {
       "queryFields" : [ {
         "boost" : 10.0,
-        "field" : "displayName"
+        "field" : "name"
       }, {
         "boost" : 1.0,
         "field" : "skills"
@@ -367,9 +346,6 @@
       }, {
         "boost" : 1.0,
         "field" : "customProperties"
-      }, {
-        "boost" : 10.0,
-        "field" : "name"
       }, {
         "boost" : 10.0,
         "field" : "fullName"
@@ -389,14 +365,8 @@
         "boost" : 0.5,
         "field" : "tags"
       }, {
-        "boost" : 0.10000000149011612,
+        "boost" : 1.0,
         "field" : "description"
-      }, {
-        "boost" : 0.20000000298023224,
-        "field" : "columns"
-      }, {
-        "boost" : 0.5,
-        "field" : "glossaryTerms"
       }, {
         "boost" : 1.0,
         "field" : "domains"
@@ -418,6 +388,9 @@
       }, {
         "boost" : 1.0,
         "field" : "platform"
+      }, {
+        "boost" : 0.5,
+        "field" : "glossaryTerms"
       }, {
         "boost" : 1.0,
         "field" : "applications"
@@ -470,7 +443,7 @@
         "boost" : 1.0,
         "field" : "cluster"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       }, {
         "boost" : 1.0,
@@ -479,7 +452,7 @@
     },
     "dataHubAccessToken" : {
       "queryFields" : [ {
-        "boost" : 1.0,
+        "boost" : 10.0,
         "field" : "name"
       }, {
         "boost" : 1.0,
@@ -487,6 +460,9 @@
       }, {
         "boost" : 1.0,
         "field" : "ownerUrn"
+      }, {
+        "boost" : 1.0,
+        "field" : "description"
       } ]
     },
     "dataHubAction" : {
@@ -519,9 +495,6 @@
     "dataHubFile" : {
       "queryFields" : [ {
         "boost" : 1.0,
-        "field" : "createdBy"
-      }, {
-        "boost" : 1.0,
         "field" : "schemaField"
       }, {
         "boost" : 1.0,
@@ -533,7 +506,7 @@
     },
     "dataHubIngestionSource" : {
       "queryFields" : [ {
-        "boost" : 1.0,
+        "boost" : 10.0,
         "field" : "name"
       } ]
     },
@@ -541,16 +514,10 @@
       "queryFields" : [ ]
     },
     "dataHubPageModule" : {
-      "queryFields" : [ {
-        "boost" : 1.0,
-        "field" : "createdBy"
-      } ]
+      "queryFields" : [ ]
     },
     "dataHubPageTemplate" : {
-      "queryFields" : [ {
-        "boost" : 1.0,
-        "field" : "createdBy"
-      } ]
+      "queryFields" : [ ]
     },
     "dataHubPersona" : {
       "queryFields" : [ ]
@@ -560,8 +527,8 @@
         "boost" : 1.0,
         "field" : "roles"
       }, {
-        "boost" : 1.0,
-        "field" : "displayName"
+        "boost" : 10.0,
+        "field" : "name"
       }, {
         "boost" : 1.0,
         "field" : "groups"
@@ -578,7 +545,7 @@
     },
     "dataHubRole" : {
       "queryFields" : [ {
-        "boost" : 1.0,
+        "boost" : 10.0,
         "field" : "name"
       }, {
         "boost" : 1.0,
@@ -587,8 +554,11 @@
     },
     "dataHubSecret" : {
       "queryFields" : [ {
-        "boost" : 1.0,
+        "boost" : 10.0,
         "field" : "name"
+      }, {
+        "boost" : 1.0,
+        "field" : "description"
       } ]
     },
     "dataHubStepState" : {
@@ -599,14 +569,14 @@
     },
     "dataHubView" : {
       "queryFields" : [ {
-        "boost" : 1.0,
-        "field" : "createdBy"
-      }, {
-        "boost" : 1.0,
+        "boost" : 10.0,
         "field" : "name"
       }, {
         "boost" : 1.0,
         "field" : "type"
+      }, {
+        "boost" : 1.0,
+        "field" : "description"
       } ]
     },
     "dataJob" : {
@@ -638,7 +608,7 @@
         "boost" : 1.0,
         "field" : "platform"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       }, {
         "boost" : 10.0,
@@ -652,9 +622,6 @@
       "queryFields" : [ {
         "boost" : 10.0,
         "field" : "name"
-      }, {
-        "boost" : 10.0,
-        "field" : "displayName"
       } ]
     },
     "dataPlatformInstance" : {
@@ -728,7 +695,7 @@
         "boost" : 0.5,
         "field" : "tags"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       }, {
         "boost" : 1.0,
@@ -736,19 +703,19 @@
       } ]
     },
     "dataType" : {
-      "queryFields" : [ ]
+      "queryFields" : [ {
+        "boost" : 10.0,
+        "field" : "qualifiedName"
+      }, {
+        "boost" : 10.0,
+        "field" : "name"
+      }, {
+        "boost" : 1.0,
+        "field" : "description"
+      } ]
     },
     "dataset" : {
       "queryFields" : [ {
-        "boost" : 0.5,
-        "field" : "glossaryTerms"
-      }, {
-        "boost" : 0.5,
-        "field" : "tags"
-      }, {
-        "boost" : 0.10000000149011612,
-        "field" : "description"
-      }, {
         "boost" : 1.0,
         "field" : "container"
       }, {
@@ -762,7 +729,13 @@
         "field" : "customProperties"
       }, {
         "boost" : 1.0,
-        "field" : "columns"
+        "field" : "description"
+      }, {
+        "boost" : 0.5,
+        "field" : "tags"
+      }, {
+        "boost" : 10.0,
+        "field" : "id"
       }, {
         "boost" : 1.0,
         "field" : "platform"
@@ -775,6 +748,9 @@
       }, {
         "boost" : 1.0,
         "field" : "platformInstance"
+      }, {
+        "boost" : 0.5,
+        "field" : "glossaryTerms"
       }, {
         "boost" : 1.0,
         "field" : "applications"
@@ -812,7 +788,7 @@
         "boost" : 1.0,
         "field" : "id"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       } ]
     },
@@ -835,6 +811,15 @@
       "queryFields" : [ {
         "boost" : 1.0,
         "field" : "id"
+      }, {
+        "boost" : 10.0,
+        "field" : "qualifiedName"
+      }, {
+        "boost" : 10.0,
+        "field" : "name"
+      }, {
+        "boost" : 1.0,
+        "field" : "description"
       } ]
     },
     "erModelRelationship" : {
@@ -851,7 +836,7 @@
         "boost" : 10.0,
         "field" : "source"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       }, {
         "boost" : 1.0,
@@ -863,7 +848,7 @@
     },
     "form" : {
       "queryFields" : [ {
-        "boost" : 1.0,
+        "boost" : 10.0,
         "field" : "name"
       }, {
         "boost" : 1.0,
@@ -877,6 +862,9 @@
       }, {
         "boost" : 1.0,
         "field" : "structuredPropertyPromptUrns"
+      }, {
+        "boost" : 1.0,
+        "field" : "description"
       } ]
     },
     "globalSettings" : {
@@ -888,7 +876,7 @@
         "field" : "name"
       }, {
         "boost" : 1.0,
-        "field" : "definition"
+        "field" : "description"
       }, {
         "boost" : 1.0,
         "field" : "customProperties"
@@ -921,7 +909,7 @@
         "field" : "name"
       }, {
         "boost" : 1.0,
-        "field" : "definition"
+        "field" : "description"
       }, {
         "boost" : 1.0,
         "field" : "customProperties"
@@ -937,15 +925,6 @@
       }, {
         "boost" : 1.0,
         "field" : "values"
-      }, {
-        "boost" : 0.5,
-        "field" : "glossaryTerms"
-      }, {
-        "boost" : 1.0,
-        "field" : "columns"
-      }, {
-        "boost" : 0.10000000149011612,
-        "field" : "description"
       }, {
         "boost" : 1.0,
         "field" : "applications"
@@ -998,14 +977,11 @@
     },
     "lifecycleStageType" : {
       "queryFields" : [ {
-        "boost" : 1.0,
-        "field" : "createdBy"
-      }, {
         "boost" : 10.0,
         "field" : "name"
       }, {
         "boost" : 1.0,
-        "field" : "lastModifiedBy"
+        "field" : "description"
       } ]
     },
     "metric" : {
@@ -1034,7 +1010,7 @@
         "boost" : 1.0,
         "field" : "platformInstance"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       }, {
         "boost" : 1.0,
@@ -1064,13 +1040,13 @@
         "boost" : 1.0,
         "field" : "platform"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       }, {
         "boost" : 1.0,
         "field" : "customProperties"
       }, {
-        "boost" : 8.0,
+        "boost" : 10.0,
         "field" : "name"
       }, {
         "boost" : 1.0,
@@ -1109,10 +1085,10 @@
         "boost" : 1.0,
         "field" : "platform"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       }, {
-        "boost" : 8.0,
+        "boost" : 10.0,
         "field" : "name"
       }, {
         "boost" : 1.0,
@@ -1145,7 +1121,7 @@
         "boost" : 1.0,
         "field" : "platform"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       }, {
         "boost" : 1.0,
@@ -1214,7 +1190,7 @@
         "boost" : 1.0,
         "field" : "platform"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       }, {
         "boost" : 1.0,
@@ -1223,7 +1199,7 @@
     },
     "mlPrimaryKey" : {
       "queryFields" : [ {
-        "boost" : 8.0,
+        "boost" : 10.0,
         "field" : "name"
       }, {
         "boost" : 1.0,
@@ -1235,6 +1211,9 @@
         "boost" : 1.0,
         "field" : "dataProduct"
       }, {
+        "boost" : 1.0,
+        "field" : "description"
+      }, {
         "boost" : 0.5,
         "field" : "tags"
       }, {
@@ -1244,7 +1223,7 @@
         "boost" : 1.0,
         "field" : "platform"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       }, {
         "boost" : 1.0,
@@ -1280,7 +1259,7 @@
         "boost" : 1.0,
         "field" : "platform"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       }, {
         "boost" : 1.0,
@@ -1289,14 +1268,11 @@
     },
     "ownershipType" : {
       "queryFields" : [ {
-        "boost" : 1.0,
-        "field" : "createdBy"
-      }, {
         "boost" : 10.0,
         "field" : "name"
       }, {
         "boost" : 1.0,
-        "field" : "lastModifiedBy"
+        "field" : "description"
       } ]
     },
     "platformResource" : {
@@ -1310,14 +1286,17 @@
     },
     "post" : {
       "queryFields" : [ {
-        "boost" : 1.0,
-        "field" : "title"
+        "boost" : 10.0,
+        "field" : "name"
       }, {
         "boost" : 1.0,
         "field" : "target"
       }, {
         "boost" : 1.0,
         "field" : "type"
+      }, {
+        "boost" : 1.0,
+        "field" : "description"
       } ]
     },
     "query" : {
@@ -1339,6 +1318,9 @@
       }, {
         "boost" : 1.0,
         "field" : "lastModifiedBy"
+      }, {
+        "boost" : 1.0,
+        "field" : "description"
       }, {
         "boost" : 1.0,
         "field" : "source"
@@ -1364,7 +1346,7 @@
         "boost" : 1.0,
         "field" : "platform"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       } ]
     },
@@ -1372,6 +1354,9 @@
       "queryFields" : [ {
         "boost" : 10.0,
         "field" : "name"
+      }, {
+        "boost" : 1.0,
+        "field" : "description"
       } ]
     },
     "schemaField" : {
@@ -1388,7 +1373,10 @@
         "boost" : 1.0,
         "field" : "schemaFieldAliases"
       }, {
-        "boost" : 1.0,
+        "boost" : 10.0,
+        "field" : "name"
+      }, {
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       } ]
     },
@@ -1418,7 +1406,7 @@
         "boost" : 1.0,
         "field" : "platformInstance"
       }, {
-        "boost" : 1.0,
+        "boost" : 0.5,
         "field" : "glossaryTerms"
       }, {
         "boost" : 1.0,
@@ -1440,7 +1428,7 @@
         "field" : "customProperties"
       }, {
         "boost" : 10.0,
-        "field" : "displayName"
+        "field" : "name"
       }, {
         "boost" : 1.0,
         "field" : "description"
@@ -1448,11 +1436,17 @@
     },
     "structuredProperty" : {
       "queryFields" : [ {
-        "boost" : 1.0,
+        "boost" : 10.0,
+        "field" : "qualifiedName"
+      }, {
+        "boost" : 10.0,
         "field" : "name"
       }, {
         "boost" : 1.0,
         "field" : "entityTypes"
+      }, {
+        "boost" : 1.0,
+        "field" : "description"
       }, {
         "boost" : 1.0,
         "field" : "allowedPlatforms"
@@ -1460,6 +1454,9 @@
     },
     "tag" : {
       "queryFields" : [ {
+        "boost" : 10.0,
+        "field" : "id"
+      }, {
         "boost" : 10.0,
         "field" : "name"
       }, {
@@ -1472,7 +1469,7 @@
     },
     "test" : {
       "queryFields" : [ {
-        "boost" : 1.0,
+        "boost" : 10.0,
         "field" : "name"
       }, {
         "boost" : 1.0,

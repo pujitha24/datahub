@@ -3,6 +3,7 @@ package com.linkedin.metadata.search.elasticsearch.query.v3;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linkedin.metadata.search.MatchedField;
+import com.linkedin.metadata.search.elasticsearch.query.request.v3.StructuredPropertySearchCatalog;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -72,7 +73,13 @@ public final class SearchTemplateMatchReport {
    */
   @Nonnull
   public static Map<String, RenderedSearchTemplate.NamedClause> namedClauses(
-      @Nonnull QueryBuilder query) {
+      @Nonnull QueryBuilder query,
+      @Nonnull List<StructuredPropertySearchCatalog.IndexedProperty> properties) {
+    Map<String, String> urnByPath = new LinkedHashMap<>();
+    for (StructuredPropertySearchCatalog.IndexedProperty property : properties) {
+      urnByPath.put(property.fieldPath(), property.propertyUrn().toString());
+      urnByPath.put(property.fullTextPath(), property.propertyUrn().toString());
+    }
     Map<String, List<Set<String>>> found = new LinkedHashMap<>();
     try {
       walk(MAPPER.readTree(query.toString()), null, found);
@@ -89,7 +96,7 @@ public final class SearchTemplateMatchReport {
         continue;
       }
       String path = fields.iterator().next();
-      String urn = StructuredPropertyQueryFields.definitionUrn(path).orElse(null);
+      String urn = urnByPath.get(path);
       if (urn == null) {
         continue;
       }

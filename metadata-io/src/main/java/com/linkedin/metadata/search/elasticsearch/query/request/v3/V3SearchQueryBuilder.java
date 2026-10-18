@@ -1836,6 +1836,28 @@ public class V3SearchQueryBuilder extends SearchQueryBuilder {
     return configured != null ? configured : fields;
   }
 
+  /**
+   * Fields selected for the request's unqualified query. Search templates use this view so their
+   * Mustache field lists follow the same V3 overlays, structured-property catalog, field
+   * configuration, and index-group mappings as the built-in Stage 1 query.
+   */
+  @Nonnull
+  public List<SearchFieldConfig> searchedFieldConfigs(
+      @Nonnull OperationContext opContext, @Nonnull Collection<EntitySpec> entitySpecs) {
+    final Collection<EntitySpec> indexGroup =
+        V3SearchFields.indexGroupSpecs(opContext.getEntityRegistry(), entitySpecs);
+    return applySearchFieldConfiguration(
+            opContext,
+            indexGroup,
+            getStandardFields(opContext, indexGroup),
+            customizedQueryHandler.resolveFieldConfiguration(
+                opContext.getSearchContext().getSearchFlags(),
+                CustomConfiguration::getSearchFieldConfigDefault))
+        .stream()
+        .filter(SearchFieldConfig::isQueryByDefault)
+        .toList();
+  }
+
   /** Search V3 queries the resolved annotation. A {@code v3} override does not change Search V2. */
   @Override
   @Nonnull

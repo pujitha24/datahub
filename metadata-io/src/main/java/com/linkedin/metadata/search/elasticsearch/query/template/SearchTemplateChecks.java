@@ -9,7 +9,6 @@ import com.linkedin.metadata.aspect.AspectRetriever;
 import com.linkedin.metadata.models.EntitySpec;
 import com.linkedin.metadata.search.elasticsearch.query.v3.SearchTemplateJson;
 import com.linkedin.metadata.search.elasticsearch.query.v3.SearchTemplateMustache;
-import com.linkedin.metadata.search.elasticsearch.query.v3.StructuredPropertyQueryFields;
 import com.linkedin.search.template.SearchFieldBoost;
 import com.linkedin.search.template.SearchFieldBoostArray;
 import com.linkedin.search.template.SearchFieldOverrides;
@@ -599,9 +598,6 @@ public final class SearchTemplateChecks {
         StructuredPropertyReferences.resolver(context, retriever);
     Set<String> queried = new LinkedHashSet<>();
     for (var field : SearchTemplateFields.pdlQueryFields(entitySpecs)) {
-      queried.add(field.fieldName());
-    }
-    for (var field : StructuredPropertyQueryFields.fields()) {
       queried.add(field.fieldName());
     }
     if (fields.hasRemove() && fields.getRemove() != null) {

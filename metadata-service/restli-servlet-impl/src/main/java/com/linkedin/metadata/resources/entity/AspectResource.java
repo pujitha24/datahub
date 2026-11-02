@@ -110,6 +110,11 @@ public class AspectResource extends CollectionResourceTaskTemplate<String, Versi
   @Named("timeseriesAspectService")
   private TimeseriesAspectService timeseriesAspectService;
 
+  @VisibleForTesting
+  void setTimeseriesAspectService(TimeseriesAspectService timeseriesAspectService) {
+    this.timeseriesAspectService = timeseriesAspectService;
+  }
+
     @Inject
     @Named("systemOperationContext")
     private OperationContext systemOperationContext;
@@ -227,7 +232,7 @@ public class AspectResource extends CollectionResourceTaskTemplate<String, Versi
           }
           if (latestValue) {
             response.setLimit(1);
-          } else {
+          } else if (limit != null) {
             response.setLimit(limit);
           }
           List<EnvelopedAspect> values =

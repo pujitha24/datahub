@@ -39,11 +39,19 @@ import com.linkedin.metadata.models.AspectSpec;
 import com.linkedin.metadata.models.registry.EntityRegistry;
 import com.linkedin.metadata.search.EntitySearchService;
 import com.linkedin.metadata.service.UpdateIndicesService;
+import com.linkedin.metadata.timeseries.TimeseriesAspectService;
 import com.linkedin.metadata.utils.GenericRecordUtils;
 import com.linkedin.mxe.GenericAspect;
 import com.linkedin.mxe.MetadataChangeLog;
 import com.linkedin.mxe.MetadataChangeProposal;
+import com.linkedin.aspect.GetTimeseriesAspectValuesResponse;
+import com.linkedin.parseq.Engine;
+import com.linkedin.parseq.EngineBuilder;
+import com.linkedin.parseq.Task;
 import java.net.URISyntaxException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.List;
 import java.util.Optional;
 
@@ -243,6 +251,47 @@ public class AspectResourceTest {
         return new AuthorizationResult(request, AuthorizationResult.Type.ALLOW, "allowed");
       });
     }
+  }
+
+  @Test
+  public void testGetTimeseriesAspectValuesWithoutLimit()
+      throws URISyntaxException, InterruptedException {
+    TimeseriesAspectService timeseriesAspectService = mock(TimeseriesAspectService.class);
+    when(timeseriesAspectService.getAspectValues(
+            any(OperationContext.class), any(Urn.class), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(List.of());
+    aspectResource.setTimeseriesAspectService(timeseriesAspectService);
+    Authentication mockAuthentication = mock(Authentication.class);
+    AuthenticationContext.setAuthentication(mockAuthentication);
+    when(mockAuthentication.getActor()).thenReturn(new Actor(ActorType.USER, "user"));
+
+    Task<GetTimeseriesAspectValuesResponse> task =
+        aspectResource.getTimeseriesAspectValues(
+            "urn:li:dataset:(urn:li:dataPlatform:platform,name,PROD)",
+            DATASET_ENTITY_NAME,
+            DATASET_USAGE_STATISTICS_ASPECT_NAME,
+            0L,
+            1L,
+            null,
+            false,
+            null,
+            null);
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+    ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    try {
+      Engine engine =
+          new EngineBuilder().setTaskExecutor(executor).setTimerScheduler(scheduler).build();
+      engine.run(task);
+      task.await();
+      assertNull(task.getError());
+    } finally {
+      scheduler.shutdownNow();
+      executor.shutdownNow();
+    }
+
+    verify(timeseriesAspectService)
+        .getAspectValues(
+            any(OperationContext.class), any(Urn.class), any(), any(), any(), any(), isNull(), any(), any());
   }
 
   @Test(expectedExceptions = RestLiServiceException.class, expectedExceptionsMessageRegExp = "Unknown aspect notAnAspect for entity dataset")
